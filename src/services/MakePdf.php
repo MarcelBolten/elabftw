@@ -18,7 +18,7 @@ use Elabftw\Models\Users;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
-use fuction str_replace;
+use function str_replace;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
