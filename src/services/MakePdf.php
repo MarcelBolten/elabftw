@@ -18,6 +18,7 @@ use Elabftw\Models\Users;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
+use fuction str_replace;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -163,7 +164,7 @@ class MakePdf extends AbstractMake
         if (!$multiEntity) {
             $mpdf->SetAuthor($this->Entity->entityData['fullname']);
             $mpdf->SetTitle($this->Entity->entityData['title']);
-            $mpdf->SetKeywords(\str_replace('|', ' ', $this->Entity->entityData['tags']));
+            $mpdf->SetKeywords(str_replace('|', ' ', $this->Entity->entityData['tags']));
         }
 
         return $mpdf;
