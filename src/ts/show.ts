@@ -9,13 +9,12 @@ declare let key: any;
 declare let MathJax: any;
 import { insertParamAndReload, notif } from './misc';
 import 'bootstrap/js/src/modal.js';
+import i18next from 'i18next';
 
 $(document).ready(function(){
-  $.ajaxSetup({
-    headers: {
-      'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-    }
-  });
+  if ($('#info').data('page') !== 'show') {
+    return;
+  }
 
   // CREATE EXPERIMENT
   key($('#shortcuts').data('create'), function() {
@@ -234,7 +233,7 @@ $(document).ready(function(){
       notif(json);
       return;
     }
-    if (!confirm($('#info').data('confirm'))) {
+    if (!confirm(i18next.t('entity-delete-warning'))) {
       return false;
     }
     // loop on it and delete stuff

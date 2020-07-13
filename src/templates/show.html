@@ -122,8 +122,10 @@
         </select>
 
     {% endif %}
-        <button data-what = 'zip' class='button btn btn-primary csvzip'>{{ 'Make Zip'|trans }}</button>
+        <button data-what='zip' class='button btn btn-primary csvzip'>{{ 'Make Zip'|trans }}</button>
         <button data-what='csv' class='button btn btn-primary csvzip'>{{ 'Make Csv'|trans }}</button>
+        <button data-what='multiPdf' class='button btn btn-primary csvzip'>{{ 'Make PDF'|trans }}</button>
+        <button data-what='json' class='button btn btn-primary csvzip'>{{ 'Make JSON'|trans }}</button>
         <button id='deleteChecked' class='button btn btn-danger'>{{ 'Delete'|trans }}</button>
     </p>
     <div class='row display-flex'>
@@ -147,12 +149,11 @@
 
 <div id='shortcuts' data-create='{{ Entity.Users.userData.sc_create }}'></div>
 <div id='info'
+    data-page='show'
     data-locale='{{ App.Users.userData.lang }}'
     data-limit='{{ limit }}'
     data-offset='{{ offset }}'
-    data-confirm="{{ 'The selected item(s) and all associated data will be permanently deleted. This cannot be undone. Are you sure?'|trans }}">
 </div>
 <div id='type' data-type='{{ Entity.type }}'></div>
 
-<script src='app/js/show.bundle.js?v={{ v }}'></script>
 {% endblock body %}

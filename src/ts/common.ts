@@ -8,7 +8,9 @@
 import $ from 'jquery';
 import 'jquery-ui/ui/widgets/sortable';
 import 'bootstrap/js/dist/modal.js';
-import { relativeMoment, notif, displayMolFiles } from './misc';
+import 'bootstrap-select';
+import { relativeMoment, notif, displayMolFiles, makeSortableGreatAgain } from './misc';
+import i18next from 'i18next';
 
 $(document).ready(function() {
   $.ajaxSetup({
@@ -16,6 +18,10 @@ $(document).ready(function() {
       'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
     }
   });
+
+  // set the language for js translated strings
+  i18next.changeLanguage($('#user-prefs').data('lang'));
+
   // TOGGLABLE
   $(document).on('click', '.togglableNext', function() {
     $(this).next().toggle();
@@ -26,29 +32,8 @@ $(document).ready(function() {
     ($('#' + $(this).data('modal')) as any).modal('toggle');
   });
 
-  // SORTABLE ELEMENTS
-  // need an axis and a table via data attribute
-  $('.sortable').sortable({
-    // limit to horizontal dragging
-    axis : $(this).data('axis'),
-    helper : 'clone',
-    handle : '.sortableHandle',
-    // we don't want the Create new pill to be sortable
-    cancel: 'nonSortable',
-    // do ajax request to update db with new order
-    update: function() {
-      // send the orders as an array
-      const ordering = $(this).sortable('toArray');
 
-      $.post('app/controllers/SortableAjaxController.php', {
-        table: $(this).data('table'),
-        ordering: ordering
-      }).done(function(json) {
-        notif(json);
-      });
-    }
-  });
-
+  makeSortableGreatAgain();
   relativeMoment();
   displayMolFiles();
 

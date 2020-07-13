@@ -6,8 +6,10 @@
  * @package elabftw
  */
 import { saveAs } from 'file-saver/dist/FileSaver.js';
-import { notif } from './misc';
+import { addDateOnCursor, notif } from './misc';
+import i18next from 'i18next';
 import tinymce from 'tinymce/tinymce';
+import 'tinymce/icons/default';
 import 'tinymce/plugins/advlist';
 import 'tinymce/plugins/charmap';
 import 'tinymce/plugins/code';
@@ -46,11 +48,9 @@ import '../js/tinymce-langs/sl_SI.js';
 import '../js/tinymce-langs/zh_CN.js';
 
 $(document).ready(function() {
-  $.ajaxSetup({
-    headers: {
-      'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-    }
-  });
+  if (window.location.pathname !== '/ucp.php') {
+    return;
+  }
   const Templates = {
     controller: 'app/controllers/EntityAjaxController.php',
     saveToFile: function(id, name): void {
@@ -62,7 +62,7 @@ $(document).ready(function() {
       saveAs(blob, name + '.elabftw.tpl');
     },
     destroy: function(id): void {
-      if (confirm('Delete this ?')) {
+      if (confirm(i18next.t('generic-delete-warning'))) {
         $.post(this.controller, {
           destroy: true,
           id: id,
@@ -158,7 +158,17 @@ $(document).ready(function() {
         });
       }
     },
-    language : $('#language').data('lang')
+    // keyboard shortcut to insert today's date at cursor in editor
+    setup: function(editor: any) {
+      editor.addShortcut('ctrl+shift+d', 'add date at cursor', function() { addDateOnCursor(); });
+      editor.addShortcut('ctrl+=', 'subscript', function() {
+        editor.execCommand('subscript');
+      });
+      editor.addShortcut('ctrl+shift+=', 'superscript', function() {
+        editor.execCommand('superscript');
+      });
+    },
+    language : $('#user-prefs').data('lang')
   });
 
   // DESTROY API KEY

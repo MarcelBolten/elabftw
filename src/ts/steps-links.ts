@@ -7,17 +7,11 @@
  */
 import $ from 'jquery';
 import 'jquery-ui/ui/widgets/autocomplete';
-import { notif, relativeMoment } from './misc';
+import { notif, relativeMoment, makeSortableGreatAgain } from './misc';
+import i18next from 'i18next';
 
 $(document).ready(function() {
-  $.ajaxSetup({
-    headers: {
-      'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-    }
-  });
   const type = $('#info').data('type');
-  const confirmStep = $('#info').data('confirmstep');
-  const confirmLink = $('#info').data('confirmlink');
 
   class Link {
 
@@ -48,7 +42,7 @@ $(document).ready(function() {
     destroy(elem): void {
       const id = elem.data('id');
       const linkId = elem.data('linkid');
-      if (confirm(confirmLink)) {
+      if (confirm(i18next.t('link-delete-warning'))) {
         $.post('app/controllers/EntityAjaxController.php', {
           destroyLink: true,
           id: id,
@@ -85,6 +79,7 @@ $(document).ready(function() {
           // reload the step list
           $('#steps_div_' + id).load(loadUrl, function() {
             relativeMoment();
+            makeSortableGreatAgain();
           });
           // clear input field
           elem.val('');
@@ -116,7 +111,7 @@ $(document).ready(function() {
       // the id of the exp/item/tpl
       const id = elem.data('id');
       const stepId = elem.data('stepid');
-      if (confirm(confirmStep)) {
+      if (confirm(i18next.t('step-delete-warning'))) {
         $.post('app/controllers/EntityAjaxController.php', {
           destroyStep: true,
           id: id,
@@ -132,6 +127,7 @@ $(document).ready(function() {
             // reload the step list
             $('#steps_div_' + id).load(loadUrl, function() {
               relativeMoment();
+              makeSortableGreatAgain();
             });
           }
         });
@@ -160,6 +156,25 @@ $(document).ready(function() {
   // DESTROY
   $(document).on('click', '.stepDestroy', function() {
     StepC.destroy($(this));
+  });
+
+  // EDITABLE STEPS
+  $(document).on('mouseenter', '.stepInput', function() {
+    ($(this) as any).editable(function(value) {
+      $.post('app/controllers/AjaxController.php', {
+        type: $(this).data('type'),
+        updateStep: true,
+        body: value,
+        id: $(this).data('id'),
+      });
+
+      return(value);
+    }, {
+      tooltip : 'Click to edit',
+      indicator : 'Saving...',
+      onblur: 'submit',
+      style : 'display:inline'
+    });
   });
 
   // END STEPS
@@ -195,7 +210,7 @@ $(document).ready(function() {
   });
 
   // DESTROY
-  $('.list-group-item').on('click', '.linkDestroy', function() {
+  $(document).on('click', '.linkDestroy', function() {
     LinkC.destroy($(this));
   });
 

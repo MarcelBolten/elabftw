@@ -93,102 +93,68 @@ class Links implements CrudInterface
     }
 
     /**
-     * Get related items
+     * Get related entities
      *
-     * @return array
+     * @return array It contains two result arrays (items, experiments).
      */
-    public function readRelatedItemsAll(): array
+    public function readRelated(): array
     {
-        $sql = "SELECT items.id AS itemid,
-            items_links.id AS linkid,
-            items.title,
-            category.name,
-            category.bookable,
-            category.color
-            FROM items_links
-            LEFT JOIN items ON (items_links.item_id = items.id)
-            LEFT JOIN items_types AS category ON (items.category = category.id)
-            LEFT JOIN users ON (items.userid = users.userid)
-            CROSS JOIN users2teams ON (users2teams.users_id = users.userid
-                                       AND users2teams.teams_id = :team_id)
-            WHERE items_links.link_id = :id
-            AND (items.canread = 'public'
-                 OR items.canread = 'organization'
-                 OR (items.canread = 'team'
-                     AND users2teams.users_id = items.userid)
-                 OR (items.canread = 'user'
-                     AND items.userid = :user_id)";
+        $res = array('items' => array(), 'experiments' => array());
 
-        // add all the teamgroups in which the user is
-        $TeamGroups = new TeamGroups($this->Entity->Users);
-        $teamgroupsOfUser = $TeamGroups->getGroupsFromUser();
-        if (!empty($teamgroupsOfUser)) {
-            foreach ($teamgroupsOfUser as $teamgroup) {
-                $sql .= " OR (items.canread = $teamgroup)";
+        foreach (array_keys($res) as $type) {
+            $sql = 'SELECT entity.id AS entityid, entity_links.id AS linkid, entity.title';
+
+            if ($type === 'items') {
+                $sql .= ', category.name, category.bookable, category.color';
             }
-        }
 
-        $sql .= ')
-            ORDER by category.name ASC, items.title ASC';
+            $sql .= ' FROM %1$s_links as entity_links
+                LEFT JOIN %1$s AS entity ON (entity_links.item_id = entity.id)';
 
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $this->Entity->id, PDO::PARAM_INT);
-        $req->bindParam(':user_id', $this->Entity->Users->userData['userid'], PDO::PARAM_INT);
-        $req->bindParam(':team_id', $this->Entity->Users->userData['team'], PDO::PARAM_INT);
-
-        $this->Db->execute($req);
-
-        $res = $req->fetchAll();
-        if ($res === false) {
-            return array();
-        }
-        return $res;
-    }
-
-    /**
-     * Get related experiments
-     *
-     * @return array
-     */
-    public function readRelatedExperimentsAll(): array
-    {
-        $sql = "SELECT experiments.id AS experimentid,
-            experiments_links.id AS linkid,
-            experiments.title
-            FROM experiments_links
-            LEFT JOIN experiments ON (experiments_links.item_id = experiments.id)
-            LEFT JOIN users ON (experiments.userid = users.userid)
-            CROSS JOIN users2teams ON (users2teams.users_id = users.userid
-                                       AND users2teams.teams_id = :team_id)
-            WHERE experiments_links.link_id = :id
-            AND (experiments.canread = 'public'
-                 OR experiments.canread = 'organization'
-                 OR (experiments.canread = 'team'
-                     AND users2teams.users_id = experiments.userid)
-                 OR (experiments.canread = 'user'
-                     AND experiments.userid = :user_id)";
-
-        // add all the teamgroups in which the user is
-        $TeamGroups = new TeamGroups($this->Entity->Users);
-        $teamgroupsOfUser = $TeamGroups->getGroupsFromUser();
-        if (!empty($teamgroupsOfUser)) {
-            foreach ($teamgroupsOfUser as $teamgroup) {
-                $sql .= " OR (experiments.canread = $teamgroup)";
+            if ($type === 'items') {
+                $sql .= ' LEFT JOIN %1$s_types AS category ON (entity.category = category.id)';
             }
-        }
 
-        $sql .= ')
-            ORDER by experiments.title ASC';
+            // Only load entities from database for which the user has read permission.
+            $sql .= " LEFT JOIN users ON (entity.userid = users.userid)
+                CROSS JOIN users2teams ON (users2teams.users_id = users.userid
+                                           AND users2teams.teams_id = :team_id)
+                WHERE entity_links.link_id = :id
+                AND (entity.canread = 'public'
+                     OR entity.canread = 'organization'
+                     OR (entity.canread = 'team'
+                         AND users2teams.users_id = entity.userid)
+                     OR (entity.canread = 'user'
+                         AND entity.userid = :user_id)";
 
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $this->Entity->id, PDO::PARAM_INT);
-        $req->bindParam(':user_id', $this->Entity->Users->userData['userid'], PDO::PARAM_INT);
-        $req->bindParam(':team_id', $this->Entity->Users->userData['team'], PDO::PARAM_INT);
-        $this->Db->execute($req);
+            // add all the teamgroups in which the user is
+            $TeamGroups = new TeamGroups($this->Entity->Users);
+            $teamgroupsOfUser = $TeamGroups->getGroupsFromUser();
+            if (!empty($teamgroupsOfUser)) {
+                foreach ($teamgroupsOfUser as $teamgroup) {
+                    $sql .= ' OR (entity.canread = $teamgroup)';
+                }
+            }
 
-        $res = $req->fetchAll();
-        if ($res === false) {
-            return array();
+            $sql .= ') ORDER by';
+
+            if ($type === 'items') {
+                $sql .= ' category.name ASC,';
+            }
+
+            $sql .= ' entity.title ASC';
+
+            $req = $this->Db->prepare(sprintf($sql, $type));
+            $req->bindParam(':id', $this->Entity->id, PDO::PARAM_INT);
+            $req->bindParam(':user_id', $this->Entity->Users->userData['userid'], PDO::PARAM_INT);
+            $req->bindParam(':team_id', $this->Entity->Users->userData['team'], PDO::PARAM_INT);
+
+            $this->Db->execute($req);
+
+            $partialRes = $req->fetchAll();
+            if ($partialRes !== false) {
+                $res[$type] = $partialRes;
+            }
         }
         return $res;
     }

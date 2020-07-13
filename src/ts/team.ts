@@ -6,6 +6,7 @@
  * @package elabftw
  */
 import { notif } from './misc';
+import i18next from 'i18next';
 import 'jquery-ui/ui/widgets/autocomplete';
 import 'bootstrap/js/src/modal.js';
 import { Calendar } from '@fullcalendar/core';
@@ -30,9 +31,10 @@ import zhcnLocale from '@fullcalendar/core/locales/zh-cn';
 import interactionPlugin from '@fullcalendar/interaction';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
+import dayGridPlugin from '@fullcalendar/daygrid';
 
 function schedulerCreate(start: string, end: string): void {
-  const title = prompt($('#info').data('addacomment'));
+  const title = prompt(i18next.t('comment-add'));
   if (title) {
     // add it to SQL
     $.post('app/controllers/SchedulerController.php', {
@@ -50,6 +52,9 @@ function schedulerCreate(start: string, end: string): void {
   }
 }
 document.addEventListener('DOMContentLoaded', function() {
+  if (window.location.pathname !== '/team.php') {
+    return;
+  }
   // if we show all items, they are not editable
   let editable = true;
   let selectable = true;
@@ -70,18 +75,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // SCHEDULER
   const calendar = new Calendar(calendarEl, {
-    plugins: [ timeGridPlugin, interactionPlugin, listPlugin, bootstrapPlugin ],
+    plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin, bootstrapPlugin ],
     header: {
       left: 'prev,next today',
       center: 'title',
-      right: 'timeGridWeek, listWeek',
+      right: 'timeGridWeek, listWeek, dayGridMonth',
     },
     themeSystem: 'bootstrap',
     // i18n
     // all available locales
     locales: [ caLocale, deLocale, enLocale, esLocale, frLocale, itLocale, idLocale, jaLocale, koLocale, nlLocale, plLocale, ptLocale, ptbrLocale, ruLocale, skLocale, slLocale, zhcnLocale ],
     // selected locale
-    locale: $('#info').data('lang'),
+    locale: $('#info').data('calendarlang'),
     defaultView: 'timeGridWeek',
     // allow selection of range
     selectable: selectable,

@@ -15,12 +15,10 @@ use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\ControllerInterface;
 use Elabftw\Models\AbstractEntity;
-use Elabftw\Models\Database;
 use Elabftw\Models\Revisions;
 use Elabftw\Models\TeamGroups;
 use Elabftw\Models\Templates;
 use Elabftw\Services\Check;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -75,18 +73,6 @@ abstract class AbstractEntityController implements ControllerInterface
         if ($this->App->Request->query->has('create')) {
             $id = $this->Entity->create((int) $this->App->Request->query->get('tpl'));
             return new RedirectResponse('?mode=edit&id=' . (string) $id);
-        }
-
-        // UPDATE RATING
-        if ($this->App->Request->request->has('rating') && $this->Entity instanceof Database) {
-            $this->Entity->setId((int) $this->App->Request->request->get('id'));
-            $this->Entity->updateRating((int) $this->App->Request->request->get('rating'));
-            $Response = new JsonResponse();
-            $Response->setData(array(
-                'res' => true,
-                'msg' => _('Saved'),
-            ));
-            return $Response;
         }
 
         // DEFAULT MODE IS SHOW
@@ -226,7 +212,7 @@ abstract class AbstractEntityController implements ControllerInterface
             'query' => $query,
             'searchType' => $searchType,
             'tagsArr' => $tagsArr,
-            'templatesArr' => $this->Templates->readAll(),
+            'templatesArr' => $this->Templates->readInclusive(),
             'visibilityArr' => $TeamGroups->getVisibilityList(),
         );
         $Response = new Response();
@@ -250,6 +236,7 @@ abstract class AbstractEntityController implements ControllerInterface
         $Revisions = new Revisions($this->Entity);
 
         $template = 'view.html';
+
         // the mode parameter is for the uploads tpl
         $renderArr = array(
             'Entity' => $this->Entity,
@@ -263,10 +250,11 @@ abstract class AbstractEntityController implements ControllerInterface
             'timestampInfo' => $this->Entity->getTimestampInfo(),
         );
 
-        // SHOW RELATED ITEMS AND EXPERIMENTS
+        // RELATED ITEMS AND EXPERIMENTS
         if ($this->Entity->type === 'items') {
-            $renderArr['relatedItemsArr'] = $this->Entity->Links->readRelatedItemsAll();
-            $renderArr['relatedExperimentsArr'] = $this->Entity->Links->readRelatedExperimentsAll();
+            ['items' => $renderArr['relatedItemsArr'],
+                'experiments' => $renderArr['relatedExperimentsArr']
+            ] = $this->Entity->Links->readRelated();
         }
 
         $Response = new Response();

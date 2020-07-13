@@ -6,7 +6,9 @@
  * @package elabftw
  */
 import { notif } from './misc';
+import i18next from 'i18next';
 import tinymce from 'tinymce/tinymce';
+import 'tinymce/icons/default';
 import 'tinymce/plugins/advlist';
 import 'tinymce/plugins/charmap';
 import 'tinymce/plugins/code';
@@ -28,11 +30,9 @@ import 'tinymce/themes/silver';
 import 'tinymce/themes/mobile';
 
 $(document).ready(function() {
-  $.ajaxSetup({
-    headers: {
-      'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-    }
-  });
+  if (window.location.pathname !== '/sysconfig.php') {
+    return;
+  }
   // TEAMS
   const Teams = {
     controller: 'app/controllers/SysconfigAjaxController.php',
@@ -176,7 +176,7 @@ $(document).ready(function() {
 
   $(document).on('click', '.idpsDestroy', function() {
     const elem = $(this);
-    if (confirm($(this).data('confirm'))) {
+    if (confirm(i18next.t('generic-delete-warning'))) {
       $.post('app/controllers/SysconfigAjaxController.php', {
         idpsDestroy: true,
         id: $(this).data('id')

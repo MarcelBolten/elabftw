@@ -9,21 +9,28 @@ declare let key: any;
 import { relativeMoment, notif } from './misc';
 import 'jquery-jeditable/src/jquery.jeditable.js';
 
+function toggleTodolist(): void {
+  if ($('#todoList').is(':visible')) {
+    $('#container').css('width', '100%').css('margin-right', 'auto');
+  } else {
+    $('#container').css('width', '70%').css('margin-right', '0');
+  }
+  $('#todoList').toggle();
+}
+
+
 $(document).ready(function() {
-  $.ajaxSetup({
-    headers: {
-      'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-    }
-  });
-  // TODOLIST TOGGLE
+  // TOGGLE
   // use shortcut
   key($('#todoSc').data('toggle'), function() {
-    $('#todoList').toggle();
+    toggleTodolist();
   });
   // or click the button
   $(document).on('click', '.todoToggle', function() {
-    $('#todoList').toggle();
+    toggleTodolist();
   });
+
+  // EDIT
   $(document).on('mouseenter', '.todoItem', function() {
     ($(this) as any).editable(function(value) {
       $.post('app/controllers/TodolistController.php', {

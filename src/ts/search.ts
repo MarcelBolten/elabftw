@@ -8,6 +8,9 @@
 import { getGetParameters } from './misc';
 
 $(document).ready(function(){
+  if (window.location.pathname !== '/search.php') {
+    return;
+  }
   // scroll to anchor if there is a search
   const getParams = getGetParameters();
   if ((getParams as any).type) {
