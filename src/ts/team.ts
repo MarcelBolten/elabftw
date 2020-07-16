@@ -32,6 +32,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import { config } from '@fortawesome/fontawesome-svg-core';
 
 function schedulerCreate(start: string, end: string): void {
   const title = prompt(i18next.t('comment-add'));
@@ -55,6 +56,10 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.location.pathname !== '/team.php') {
     return;
   }
+  // use this setting to prevent bug in fullcalendar
+  // see https://github.com/fullcalendar/fullcalendar/issues/5544
+  config.autoReplaceSvg = 'nest';
+
   // if we show all items, they are not editable
   let editable = true;
   let selectable = true;
@@ -76,10 +81,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // SCHEDULER
   const calendar = new Calendar(calendarEl, {
     plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin, bootstrapPlugin ],
-    header: {
+    headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'timeGridWeek, listWeek, dayGridMonth',
+      right: 'timeGridWeek,listWeek,dayGridMonth',
     },
     themeSystem: 'bootstrap',
     // i18n
@@ -87,16 +92,17 @@ document.addEventListener('DOMContentLoaded', function() {
     locales: [ caLocale, deLocale, enLocale, esLocale, frLocale, itLocale, idLocale, jaLocale, koLocale, nlLocale, plLocale, ptLocale, ptbrLocale, ruLocale, skLocale, slLocale, zhcnLocale ],
     // selected locale
     locale: $('#info').data('calendarlang'),
-    defaultView: 'timeGridWeek',
+    initialView: 'timeGridWeek',
     // allow selection of range
     selectable: selectable,
     // draw an event while selecting
     selectMirror: true,
+    // if no item is selected, the calendar is not editable
     editable: editable,
     // allow "more" link when too many events
-    eventLimit: true,
+    dayMaxEventRows: true,
     // set the date loaded
-    defaultDate: selectedDate,
+    initialDate: selectedDate,
     // load the events as JSON
     eventSources: [
       {
@@ -111,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // remove possibility to book whole day, might add it later
     allDaySlot: false,
     // day start at 6 am
-    minTime: '06:00:00',
+    slotMinTime: '06:00:00',
     eventBackgroundColor: 'rgb(41,174,185)',
     // selection
     select: function(info): void {
@@ -220,6 +226,7 @@ document.addEventListener('DOMContentLoaded', function() {
     },
   });
   calendar.render();
+  calendar.updateSize();
 
 });
 
