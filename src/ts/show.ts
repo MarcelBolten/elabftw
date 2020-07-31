@@ -22,8 +22,10 @@ $(document).ready(function(){
   });
 
   // validate the form upon change. fix #451
+  // add to the input itself, not the form for more flexibility
+  // for instance the tags input allow multiple selection, so we don't want to submit on change
   $('.autosubmit').on('change', function() {
-    $(this).submit();
+    $(this).closest('form').submit();
   });
 
   // TOGGLE BODY
@@ -219,7 +221,7 @@ $(document).ready(function(){
     // grey out the box to signal it has been clicked
     $(this).attr('disabled', 'disabled');
     // also display a wait text
-    $(this).html('Please wait…');
+    $(this).html(i18next.t('please-wait'));
     window.location.href = `make.php?what=${$(this).data('what')}&type=${$('#type').data('type')}&id=${checked.map(value => value.id).join('+')}`;
   });
 
