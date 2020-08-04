@@ -22,9 +22,7 @@ const Todolist = {
       }).done(function(json) {
         if (json.res) {
           // reload the todolist
-          $('#todoItems-list').load('? #todoItems-list>*', function() {
-            relativeMoment();
-          });
+          Todolist.getTodoItems();
           // and clear the input
           $('#todo').val('');
         } else {
@@ -57,9 +55,9 @@ const Todolist = {
     }).done(function(json) {
       let html = '';
       for (const exp of json.msg) {
-        html += `<li><h3>${exp.title}</h3>`;
+        html += `<li><h3><a href='experiments.php?mode=view&id=${exp.id}'>${exp.title}</a></h3>`;
         for (const [stepId, stepBody] of Object.entries(exp.steps)) {
-          html += `<div><input type='checkbox' class='stepbox mr-1' data-id='${exp.id}' data-stepid='${stepId}' />${stepBody}</div>`;
+          html += `<div><input type='checkbox' class='stepbox mr-1' data-id='${exp.id}' data-type='experiments' data-stepid='${stepId}' />${stepBody}</div>`;
         }
         html += '</li>';
       }
