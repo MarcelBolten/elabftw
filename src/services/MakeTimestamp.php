@@ -24,6 +24,7 @@ use Elabftw\Models\Teams;
 use GuzzleHttp\Exception\RequestException;
 use function hash_file;
 use function is_readable;
+use function mb_strlen;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Logger;
 use PDO;
@@ -243,7 +244,7 @@ class MakeTimestamp extends AbstractMake
         $teamConfigArr = $teams->read();
         // if there is a config in the team, use that
         // otherwise use the general config if we can
-        if (\mb_strlen($teamConfigArr['stampprovider'] ?? '') > 2) {
+        if (mb_strlen($teamConfigArr['stampprovider'] ?? '') > 2) {
             $config = $teamConfigArr;
         } elseif ($this->Config->configArr['stampshare']) {
             $config = $this->Config->configArr;
@@ -284,7 +285,7 @@ class MakeTimestamp extends AbstractMake
     /**
      * Run a process
      *
-     * @param array $args arguments including the executable
+     * @param array<string> $args arguments including the executable
      * @param string|null $cwd command working directory
      * @return string
      */

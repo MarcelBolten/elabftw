@@ -10,10 +10,14 @@ declare(strict_types=1);
 
 namespace Elabftw\Models;
 
+use function bin2hex;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Interfaces\CreateInterface;
+use Elabftw\Maps\Team;
 use Elabftw\Services\Filter;
 use PDO;
+use function random_bytes;
+use function sha1;
 
 /**
  * All about the experiments
@@ -62,6 +66,11 @@ class Experiments extends AbstractEntity implements CreateInterface
         if ($this->Users->userData['default_write'] !== null) {
             $canwrite = $this->Users->userData['default_write'];
         }
+
+        // enforce the permissions if the admin has set them
+        $Team = new Team((int) $this->Users->userData['team']);
+        $canread = $Team->getDoForceCanread() === 1 ? $Team->getForceCanread() : $canread;
+        $canwrite = $Team->getDoForceCanwrite() === 1 ? $Team->getForceCanwrite() : $canwrite;
 
         // SQL for create experiments
         $sql = 'INSERT INTO experiments(title, date, body, category, elabid, canread, canwrite, datetime, userid)
@@ -229,7 +238,7 @@ class Experiments extends AbstractEntity implements CreateInterface
         $this->Db->execute($req);
 
         // delete from pinned
-        $this->rmFromPinned();
+        $this->Pins->rmFromPinned();
     }
 
     /**
@@ -337,6 +346,6 @@ class Experiments extends AbstractEntity implements CreateInterface
     private function generateElabid(): string
     {
         $date = Filter::kdate();
-        return $date . '-' . \sha1(\bin2hex(\random_bytes(16)));
+        return $date . '-' . sha1(bin2hex(random_bytes(16)));
     }
 }

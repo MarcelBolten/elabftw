@@ -424,7 +424,7 @@ CREATE TABLE `tags2entity` (
 CREATE TABLE `teams` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `deletable_xp` tinyint(1) NOT NULL DEFAULT '1',
+  `deletable_xp` tinyint(1) NOT NULL DEFAULT 1,
   `link_name` text NOT NULL,
   `link_href` text NOT NULL,
   `datetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -434,7 +434,12 @@ CREATE TABLE `teams` (
   `stampcert` text,
   `stamphash` varchar(10) DEFAULT 'sha256',
   `orgid` varchar(255) DEFAULT NULL,
-  `public_db` tinyint(1) NOT NULL DEFAULT '0'
+  `public_db` tinyint(1) NOT NULL DEFAULT 0,
+  `force_canread` varchar(255) NOT NULL DEFAULT 'team',
+  `force_canwrite` varchar(255) NOT NULL DEFAULT 'user',
+  `do_force_canread` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
+  `do_force_canwrite` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
+  `visible` tinyint(1) UNSIGNED NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 --
@@ -563,8 +568,8 @@ CREATE TABLE `users` (
   `default_write` varchar(255) NULL DEFAULT 'user',
   `single_column_layout` tinyint(1) NOT NULL DEFAULT '0',
   `cjk_fonts` tinyint(1) NOT NULL DEFAULT '0',
-  `orderby` varchar(255) DEFAULT NULL,
-  `sort` varchar(255) DEFAULT NULL,
+  `orderby` varchar(255) NOT NULL DEFAULT 'date',
+  `sort` varchar(255) NOT NULL DEFAULT 'desc',
   `use_markdown` tinyint(1) NOT NULL DEFAULT '0',
   `inc_files_pdf` tinyint(1) NOT NULL DEFAULT '1',
   `archived` tinyint(1) NOT NULL DEFAULT '0',
