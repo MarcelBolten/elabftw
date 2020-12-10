@@ -12,7 +12,6 @@ namespace Elabftw\Commands;
 
 use Elabftw\Elabftw\Db;
 use Elabftw\Traits\UploadTrait;
-use file_exists;
 use PDO;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -73,7 +72,7 @@ class CheckUploads extends Command
         foreach ($onlyOnHD as $file) {
             if (strpos($file, '_th')) {
                 $parentFile = preg_replace('/\.(.*)_th\..*/', '.\1', $file);
-                if (!in_array($parentFile, $filesHD)) {
+                if (!in_array($parentFile, $filesHD, true)) {
                     $output->writeln($file);
                     $n++;
                 }
