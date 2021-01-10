@@ -7,10 +7,9 @@
  */
 declare let key: any;
 declare let MathJax: any;
-import { insertParamAndReload, notif } from './misc';
+import { getCheckedBoxes, insertParamAndReload, notif } from './misc';
 import 'bootstrap/js/src/modal.js';
 import i18next from 'i18next';
-import { CheckableItem } from './interfaces';
 
 $(document).ready(function(){
   if ($('#info').data('page') !== 'show') {
@@ -68,22 +67,11 @@ $(document).ready(function(){
   // END PAGINATION
 
   // THE CHECKBOXES
-  function getCheckedBoxes(): Array<CheckableItem> {
-    const checkedBoxes = [];
-    $('input[type=checkbox]:checked').each(function() {
-      checkedBoxes.push({
-        id: $(this).data('id'),
-        // the randomid is used to get the parent container and hide it when delete
-        randomid: $(this).data('randomid'),
-      });
-    });
-    return checkedBoxes;
-  }
 
   const bgColor = '#c4f9ff';
 
   // CHECK A BOX
-  $('input[type=checkbox]').on('click', function() {
+  $('.item input[type=checkbox]').on('click', function() {
     if ($(this).prop('checked')) {
       $(this).parent().parent().css('background-color', bgColor);
     } else {
@@ -107,8 +95,8 @@ $(document).ready(function(){
 
   // SELECT ALL
   $('#selectAllBoxes').on('click', function() {
-    $('input[type=checkbox]').prop('checked', true);
-    $('input[type=checkbox]').parent().parent().css('background-color', bgColor);
+    $('.item input[type=checkbox]').prop('checked', true);
+    $('.item input[type=checkbox]').parent().parent().css('background-color', bgColor);
     $('#advancedSelectOptions').show();
     $('#withSelected').show();
     // also disable pagination because this will select all even the hidden ones
@@ -119,8 +107,8 @@ $(document).ready(function(){
 
   // UNSELECT ALL
   $('#unselectAllBoxes').on('click', function() {
-    $('input:checkbox').prop('checked', false);
-    $('input[type=checkbox]').parent().parent().css('background-color', '');
+    $('.item input:checkbox').prop('checked', false);
+    $('.item input[type=checkbox]').parent().parent().css('background-color', '');
     // hide menu
     $('#withSelected').hide();
     $('#advancedSelectOptions').hide();
@@ -128,7 +116,7 @@ $(document).ready(function(){
 
   // INVERT SELECTION
   $('#invertSelection').on('click', function() {
-    ($('input[type=checkbox]') as any).each(function () {
+    ($('.item input[type=checkbox]') as any).each(function () {
       this.checked = !this.checked;
       if ($(this).prop('checked')) {
         $(this).parent().parent().css('background-color', bgColor);
@@ -142,7 +130,7 @@ $(document).ready(function(){
   $('#withSelected').hide();
   // no need to show the unselect/invert links if no one is selected
   $('#advancedSelectOptions').hide();
-  $('input[type=checkbox]').on('click', function() {
+  $('.item input[type=checkbox]').on('click', function() {
     $('#advancedSelectOptions').show();
     $('#withSelected').show();
   });
