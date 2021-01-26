@@ -156,6 +156,7 @@ MySQL database structure version: {{ App.Config.configArr.schema }}</p>
       <hr>
       <ul class='list-group'>
         <li class='list-group-item'>{{ 'Operating System'|trans }}: {{ phpInfos.0 }}</li>
+        <li class='list-group-item'>{{ 'Server version'|trans }}: {{ phpInfos.7 }}</li>
         <li class='list-group-item'>{{ 'PHP Version'|trans }}: {{ phpInfos.1 }}</li>
         <li class='list-group-item'>{{ 'Largest integer supported'|trans }}: {{ phpInfos.2 }}</li>
         <li class='list-group-item'>{{ 'PHP configuration directory'|trans }}: {{ phpInfos.3 }}</li>
@@ -163,6 +164,7 @@ MySQL database structure version: {{ App.Config.configArr.schema }}</p>
         {% if phpInfos.5|length > 1 %}
           <li class='list-group-item'>{{ 'Timezone'|trans }}: {{ phpInfos.5 }}</li>
         {% endif %}
+        <li class='list-group-item'>{{ 'SQL server version'|trans }}: {{ phpInfos.6 }}</li>
       </ul>
   </div>
 </div>
@@ -624,7 +626,9 @@ MySQL database structure version: {{ App.Config.configArr.schema }}</p>
             <h4>Existing Identity Providers</h4>
             {% for idp in idpsArr %}
                 <div class='box' id='idps_div'>
-                  <i class='fas fa-trash-alt fa-2x clickable idpsDestroy align-right' title='Delete' data-id='{{ idp.id }}'></i>
+                  <a class='clickable idpsDestroy align-right' title='{{ 'Delete'|trans }}' data-id='{{ idp.id }}'>
+                      <i class='fas fa-trash-alt fa-2x'></i>
+                  </a>
                   <h4>{{ idp.name|upper }} ({{ idp.entityid }})</h4>
                   <form method='post' action='app/controllers/IdpsController.php'>
                     <div class='form-group'>
