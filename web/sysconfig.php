@@ -18,7 +18,6 @@ use Elabftw\Models\Idps;
 use Elabftw\Models\Teams;
 use Elabftw\Services\UsersHelper;
 use Exception;
-use PDO;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
