@@ -13,9 +13,9 @@ namespace Elabftw\Elabftw;
 use Elabftw\Interfaces\EntityParamsInterface;
 use Elabftw\Services\Filter;
 
-final class EntityParams extends ContentParams implements EntityParamsInterface
+class EntityParams extends ContentParams implements EntityParamsInterface
 {
-    private ?array $extra;
+    protected ?array $extra;
 
     public function __construct(string $content, string $target = '', ?array $extra = null)
     {
@@ -43,6 +43,11 @@ final class EntityParams extends ContentParams implements EntityParamsInterface
         return Filter::body($this->extra['body']);
     }
 
+    public function getRating(): int
+    {
+        return (int) $this->content;
+    }
+
     public function getMetadata(): string
     {
         return $this->content;
@@ -50,6 +55,6 @@ final class EntityParams extends ContentParams implements EntityParamsInterface
 
     public function getField(): string
     {
-        return Filter::sanitize($this->extra['jsonField']);
+        return Filter::sanitize($this->extra['jsonField'] ?? '');
     }
 }

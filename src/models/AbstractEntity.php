@@ -22,6 +22,7 @@ use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Interfaces\ContentParamsInterface;
 use Elabftw\Interfaces\CrudInterface;
 use Elabftw\Interfaces\EntityParamsInterface;
+use Elabftw\Interfaces\ItemTypeParamsInterface;
 use Elabftw\Maps\Team;
 use Elabftw\Services\Check;
 use Elabftw\Services\Email;
@@ -98,7 +99,7 @@ abstract class AbstractEntity implements CrudInterface
         $this->Tags = new Tags($this);
         $this->Uploads = new Uploads($this);
         $this->Users = $users;
-        $this->Comments = new Comments($this, new Email(new Config(), $this->Users));
+        $this->Comments = new Comments($this, new Email(Config::getConfig(), $this->Users));
         $this->TeamGroups = new TeamGroups($this->Users);
         $this->Pins = new Pins($this);
 
@@ -256,7 +257,7 @@ abstract class AbstractEntity implements CrudInterface
             return $this->getBoundEvents();
         }
         if ($params->getTarget() === 'metadata') {
-            return $this->readAll()['metadata'];
+            return array('metadata' => $this->readAll()['metadata']);
         }
         return $this->readAll();
     }
@@ -339,7 +340,7 @@ abstract class AbstractEntity implements CrudInterface
      * Update an entity. The revision is saved before so it can easily compare old and new body.
      */
     //public function update(string $title, string $date, string $body): void
-    public function update(EntityParamsInterface $params): bool
+    public function update(EntityParamsInterface | ItemTypeParamsInterface $params): bool
     {
         $this->canOrExplode('write');
 
@@ -353,6 +354,9 @@ abstract class AbstractEntity implements CrudInterface
             case 'body':
                 $content = $params->getBody();
                 break;
+            case 'rating':
+                $content = $params->getRating();
+                break;
             case 'metadata':
                 if (!empty($params->getField())) {
                     return $this->updateJsonField($params);
@@ -365,13 +369,13 @@ abstract class AbstractEntity implements CrudInterface
 
         // save a revision for body target
         if ($params->getTarget() === 'body') {
-            $Config = new Config();
+            $Config = Config::getConfig();
             $Revisions = new Revisions(
                 $this,
                 (int) $Config->configArr['max_revisions'],
                 (int) $Config->configArr['min_delta_revisions'],
             );
-            $Revisions->create($content);
+            $Revisions->create((string) $content);
         }
 
         $sql = 'UPDATE ' . $this->type . ' SET ' . $params->getTarget() . ' = :content WHERE id = :id';
@@ -482,6 +486,17 @@ abstract class AbstractEntity implements CrudInterface
         }
 
         return array('read' => false, 'write' => false);
+    }
+
+    public function updateRating(int $rating): void
+    {
+        $this->canOrExplode('write');
+
+        $sql = 'UPDATE ' . $this->type . ' SET rating = :rating WHERE id = :id';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':rating', $rating, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        $this->Db->execute($req);
     }
 
     /**
@@ -664,6 +679,7 @@ abstract class AbstractEntity implements CrudInterface
                 entity.title,
                 entity.date,
                 entity.category,
+                entity.rating,
                 entity.userid,
                 entity.locked,
                 entity.canread,

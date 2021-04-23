@@ -100,7 +100,7 @@ class PopulateDatabase extends Command
         $configArr = $yaml['config'] ?? array();
         $configArr['smtp_password'] = $input->getOption('smtppass') ?? 'afakepassword';
         $configArr['smtp_username'] = $input->getOption('smtpuser') ?? 'somesmtpuser';
-        $Config = new Config();
+        $Config = Config::getConfig();
         $Config->update($configArr);
 
         // create teams
@@ -124,15 +124,15 @@ class PopulateDatabase extends Command
         $Users1 = new Users(1, 1);
         $ItemsTypes = new ItemsTypes($Users1->team);
         foreach ($yaml['items_types'] as $items_types) {
-            $ItemsTypes->create(new ItemTypeParams(
-                $items_types['name'],
-                $items_types['color'],
-                $items_types['template'],
-                'team',
-                'team',
-                (int) $items_types['bookable'],
-                (int) $items_types['team'],
-            ));
+            $extra = array(
+                'color' => $items_types['color'],
+                'body' => $items_types['template'],
+                'canread' => 'team',
+                'canwrite' => 'team',
+                'isBookable' => $items_types['bookable'],
+                'team' => $items_types['team'],
+            );
+            $ItemsTypes->create(new ItemTypeParams($items_types['name'], 'all', $extra));
         }
 
 

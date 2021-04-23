@@ -5,7 +5,7 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import { Payload, Method, Action, Entity, EntityType, Target, ResponseMsg } from './interfaces';
+import { Payload, Method, Action, Entity, EntityType, Target, ResponseMsg, MetadataJson } from './interfaces';
 import { Ajax } from './Ajax.class';
 import i18next from 'i18next';
 
@@ -42,10 +42,11 @@ export class Metadata {
     };
     return this.sender.send(payload).then(json => {
       // if there are no metadata.json file available, return an empty object
-      if (json.res === false) {
+      const fulljson = (json.value as MetadataJson);
+      if (!fulljson.metadata) {
         return {};
       }
-      return JSON.parse(json.value as string);
+      return JSON.parse(fulljson.metadata);
     });
   }
 

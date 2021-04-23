@@ -16,6 +16,9 @@ declare let key: any;
 
 document.addEventListener('DOMContentLoaded', () => {
 
+  if (!document.getElementById('info')) {
+    return;
+  }
   // holds info about the page through data attributes
   const about = document.getElementById('info').dataset;
 
@@ -124,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
       loading.appendChild(ring);
       overlay.appendChild(loading);
       document.getElementById('container').append(overlay);
-      AjaxC.post('bloxberg').then(() => window.location.replace(`experiments.php?mode=view&id=${entity.id}`));
+      AjaxC.post('bloxberg').then(() => window.location.replace(`?mode=view&id=${entity.id}`));
     }
   });
 });

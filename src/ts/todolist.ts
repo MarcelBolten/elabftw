@@ -11,9 +11,14 @@ import Todolist from './Todolist.class';
 import i18next from 'i18next';
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (!document.getElementById('info')) {
+    return;
+  }
+
   const TodolistC = new Todolist();
 
-  if (document.getElementById('info').dataset.page === 'login') {
+  const pagesWithoutTodo = ['login', 'register', 'change-pass'];
+  if (pagesWithoutTodo.includes(document.getElementById('info').dataset.page)) {
     return;
   }
 

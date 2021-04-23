@@ -50,16 +50,23 @@ import '../js/tinymce-langs/zh_CN.js';
 import EntityClass from './Entity.class';
 import { Entity, EntityType, Target } from './interfaces';
 
-const about = document.getElementById('info').dataset;
-const type = about.type;
-const id = about.id;
+let about;
+let type = 'experiments';
+let id = '0';
 let entityType: EntityType;
-if (about.type === 'experiments') {
-  entityType = EntityType.Experiment;
+
+if (document.getElementById('info')) {
+  about = document.getElementById('info').dataset;
+  type = about.type;
+  id = about.id;
+  if (about.type === 'experiments') {
+    entityType = EntityType.Experiment;
+  }
+  if (about.type === 'items') {
+    entityType = EntityType.Item;
+  }
 }
-if (about.type === 'items') {
-  entityType = EntityType.Item;
-}
+
 const entity: Entity = {
   type: entityType,
   id: parseInt(id),
@@ -95,14 +102,20 @@ function getNow(): DateTime {
   return DateTime.now().setLocale(locale);
 }
 
-// ctrl-shift-D will add the date in the tinymce editor
-function addDateOnCursor(): void {
-  tinymce.activeEditor.execCommand('mceInsertContent', false, `${getNow().toLocaleString(DateTime.DATE_HUGE)} `);
+function getDatetime(): string {
+  const useIso = document.getElementById('user-prefs').dataset.isodate;
+  if (useIso === '1') {
+    const fullDatetime = getNow().toISO({ includeOffset: false });
+    // now we remove the milliseconds from that string
+    // 2021-04-23T18:57:28.633  ->  2021-04-23T18:57:28
+    return fullDatetime.slice(0, -4);
+  }
+  return getNow().toLocaleString(DateTime.DATETIME_MED_WITH_WEEKDAY);
 }
 
-// ctrl-shift-T will add the time in the tinymce editor
-function addTimeOnCursor(): void {
-  tinymce.activeEditor.execCommand('mceInsertContent', false, `${getNow().toLocaleString(DateTime.TIME_WITH_SECONDS)} `);
+// ctrl-shift-D will add the date in the tinymce editor
+function addDatetimeOnCursor(): void {
+  tinymce.activeEditor.execCommand('mceInsertContent', false, `${getDatetime()} `);
 }
 
 function isOverCharLimit(): boolean {
@@ -134,7 +147,7 @@ export function getTinymceBaseConfig(page: string): object {
     skin_url: 'app/css/tinymce', // eslint-disable-line @typescript-eslint/camelcase
     plugins: plugins,
     pagebreak_separator: '<pagebreak>', // eslint-disable-line @typescript-eslint/camelcase
-    toolbar1: 'undo redo | styleselect bold italic underline | alignleft aligncenter alignright alignjustify | superscript subscript | bullist numlist outdent indent | forecolor backcolor | charmap | codesample | link | save',
+    toolbar1: 'undo redo | styleselect bold italic underline | alignleft aligncenter alignright alignjustify | superscript subscript | bullist numlist outdent indent | forecolor backcolor | charmap adddate | codesample | link | save',
     removed_menuitems: 'newdocument, image', // eslint-disable-line @typescript-eslint/camelcase
     image_caption: true, // eslint-disable-line @typescript-eslint/camelcase
     images_reuse_filename: true, // eslint-disable-line @typescript-eslint/camelcase
@@ -190,9 +203,16 @@ export function getTinymceBaseConfig(page: string): object {
     setup: (editor: any): void => {
       // make the edges round
       editor.on('init', () => editor.getContainer().className += ' rounded');
+      // add date+time button
+      editor.ui.registry.addButton('adddate', {
+        icon: 'insert-time',
+        tooltip: 'Insert timestamp',
+        onAction: function (_) {
+          editor.insertContent(`${getDatetime()} `);
+        }
+      });
       // some shortcuts
-      editor.addShortcut('ctrl+shift+d', 'add date at cursor', addDateOnCursor);
-      editor.addShortcut('ctrl+shift+t', 'add time at cursor', addTimeOnCursor);
+      editor.addShortcut('ctrl+shift+d', 'add date/time at cursor', addDatetimeOnCursor);
       editor.addShortcut('ctrl+=', 'subscript', () => editor.execCommand('subscript'));
       editor.addShortcut('ctrl+shift+=', 'superscript', () => editor.execCommand('superscript'));
 

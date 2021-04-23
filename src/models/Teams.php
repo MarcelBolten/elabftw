@@ -159,15 +159,15 @@ class Teams implements ReadableInterface, DestroyableInterface
 
         // create default item type
         $ItemsTypes = new ItemsTypes($this->Users->team);
-        $ItemsTypes->create(new ItemTypeParams(
-            'Edit me',
-            '#32a100',
-            '<p>Go to the admin panel to edit/add more items types!</p>',
-            'team',
-            'team',
-            0,
-            $newId,
-        ));
+        $extra = array(
+            'color' => '#32a100',
+            'body' => '<p>Go to the admin panel to edit/add more items types!</p>',
+            'canread' => 'team',
+            'canwrite' => 'team',
+            'isBookable' => '0',
+            'team' => $newId,
+        );
+        $ItemsTypes->create(new ItemTypeParams('Edit me', 'all', $extra));
 
         return $newId;
     }
@@ -290,7 +290,7 @@ class Teams implements ReadableInterface, DestroyableInterface
 
     private function createTeamIfAllowed(string $name): int
     {
-        $Config = new Config();
+        $Config = Config::getConfig();
         if ($Config->configArr['saml_team_create']) {
             return $this->create($name);
         }
