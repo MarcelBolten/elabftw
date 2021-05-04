@@ -11,17 +11,17 @@ declare(strict_types=1);
 namespace Elabftw\Controllers;
 
 use Elabftw\Elabftw\App;
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\DisplayParams;
-use Elabftw\Elabftw\ParamsProcessor;
 use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\ControllerInterface;
 use Elabftw\Models\AbstractEntity;
+use Elabftw\Models\Experiments;
 use Elabftw\Models\Revisions;
 use Elabftw\Models\TeamGroups;
 use Elabftw\Models\Templates;
 use Elabftw\Services\Check;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -29,24 +29,15 @@ use Symfony\Component\HttpFoundation\Response;
  */
 abstract class AbstractEntityController implements ControllerInterface
 {
-    /** @var App $App instance of App */
-    protected $App;
+    protected App $App;
 
-    /** @var AbstractEntity $Entity instance of AbstractEntity */
+    /** @var AbstractEntity $Entity */
     protected $Entity;
 
-    /** @var Templates $Templates instance of Templates */
-    protected $Templates;
+    protected Templates $Templates;
 
-    /** @var array $categoryArr array of category (status or item type) */
-    protected $categoryArr = array();
+    protected array $categoryArr = array();
 
-    /**
-     * Constructor
-     *
-     * @param App $app
-     * @param AbstractEntity $entity
-     */
     public function __construct(App $app, AbstractEntity $entity)
     {
         $this->App = $app;
@@ -56,36 +47,21 @@ abstract class AbstractEntityController implements ControllerInterface
 
     /**
      * Get the Response object from the Request
-     *
-     * @return Response
      */
     public function getResponse(): Response
     {
-        // VIEW
-        if ($this->App->Request->query->get('mode') === 'view') {
-            return $this->view();
+        switch ($this->App->Request->query->get('mode')) {
+            case 'view':
+                return $this->view();
+            case 'edit':
+                return $this->edit();
+            default:
+                return $this->show();
         }
-
-        // EDIT
-        if ($this->App->Request->query->get('mode') === 'edit') {
-            return $this->edit();
-        }
-
-        // CREATE
-        if ($this->App->Request->query->has('create') && !$this->App->Session->get('is_anon')) {
-            $params = new ParamsProcessor(array('id' => $this->App->Request->query->get('tpl')));
-            $id = $this->Entity->create($params);
-            return new RedirectResponse('?mode=edit&id=' . (string) $id);
-        }
-
-        // DEFAULT MODE IS SHOW
-        return $this->show();
     }
 
     /**
      * Show mode (several items displayed). Default view.
-     *
-     * @return Response
      */
     public function show(bool $isSearchPage = false): Response
     {
@@ -163,15 +139,11 @@ abstract class AbstractEntityController implements ControllerInterface
 
     /**
      * Get the items
-     *
-     * @return array
      */
     abstract protected function getItemsArr(): array;
 
     /**
      * View mode (one item displayed)
-     *
-     * @return Response
      */
     protected function view(): Response
     {
@@ -179,7 +151,11 @@ abstract class AbstractEntityController implements ControllerInterface
         $this->Entity->canOrExplode('read');
 
         // REVISIONS
-        $Revisions = new Revisions($this->Entity);
+        $Revisions = new Revisions(
+            $this->Entity,
+            (int) $this->App->Config->configArr['max_revisions'],
+            (int) $this->App->Config->configArr['min_delta_revisions'],
+        );
 
         $template = 'view.html';
 
@@ -187,11 +163,11 @@ abstract class AbstractEntityController implements ControllerInterface
         $renderArr = array(
             'Entity' => $this->Entity,
             'categoryArr' => $this->categoryArr,
-            'commentsArr' => $this->Entity->Comments->read(),
-            'linksArr' => $this->Entity->Links->read(),
+            'commentsArr' => $this->Entity->Comments->read(new ContentParams()),
+            'linksArr' => $this->Entity->Links->read(new ContentParams()),
             'mode' => 'view',
             'revNum' => $Revisions->readCount(),
-            'stepsArr' => $this->Entity->Steps->read(),
+            'stepsArr' => $this->Entity->Steps->read(new ContentParams()),
             'templatesArr' => $this->Templates->readForUser(),
             'timestampInfo' => $this->Entity->getTimestampInfo(),
             'uploadsArr' => $this->Entity->Uploads->readAll(),
@@ -213,8 +189,6 @@ abstract class AbstractEntityController implements ControllerInterface
 
     /**
      * Edit mode
-     *
-     * @return Response
      */
     protected function edit(): Response
     {
@@ -227,7 +201,11 @@ abstract class AbstractEntityController implements ControllerInterface
         }
 
         // REVISIONS
-        $Revisions = new Revisions($this->Entity);
+        $Revisions = new Revisions(
+            $this->Entity,
+            (int) $this->App->Config->configArr['max_revisions'],
+            (int) $this->App->Config->configArr['min_delta_revisions'],
+        );
 
         // VISIBILITY ARR
         $TeamGroups = new TeamGroups($this->Entity->Users);
@@ -238,11 +216,11 @@ abstract class AbstractEntityController implements ControllerInterface
             'Entity' => $this->Entity,
             'categoryArr' => $this->categoryArr,
             'lang' => Tools::getCalendarLang($this->App->Users->userData['lang'] ?? 'en_GB'),
-            'linksArr' => $this->Entity->Links->read(),
+            'linksArr' => $this->Entity->Links->read(new ContentParams()),
             'maxUploadSize' => Tools::getMaxUploadSize(),
             'mode' => 'edit',
             'revNum' => $Revisions->readCount(),
-            'stepsArr' => $this->Entity->Steps->read(),
+            'stepsArr' => $this->Entity->Steps->read(new ContentParams()),
             'templatesArr' => $this->Templates->readForUser(),
             'uploadsArr' => $this->Entity->Uploads->readAll(),
             'visibilityArr' => $TeamGroups->getVisibilityList(),

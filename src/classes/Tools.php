@@ -149,7 +149,7 @@ class Tools
      * Take a 8 digits input and output 2014.08.16
      *
      * @param string $date Input date '20140302'
-     * @param string $s an optionnal param to specify the separator
+     * @param string $s an optional param to specify the separator
      * @throws InvalidArgumentException
      * @return string The formatted string
      */
@@ -272,7 +272,7 @@ class Tools
     }
 
     /**
-     * Display the stars rating for a DB item
+     * Display the stars rating for an entity
      *
      * @param int $rating The number of stars to display
      * @return string HTML of the stars
@@ -289,25 +289,27 @@ class Tools
      * Return a full URL of the elabftw install.
      * Will first check for config value of 'url' or try to guess from Request
      *
-     * @param Request $Request
-     * @return string the url
      */
-    public static function getUrl(Request $Request): string
+    public static function getUrl(Request $Request, bool $canonical = false): string
     {
-        $Config = new Config();
+        $Config = Config::getConfig();
 
-        return $Config->configArr['url'] ?? self::getUrlFromRequest($Request);
+        if ($Config->configArr['url']) {
+            return $Config->configArr['url'];
+        }
+        return self::getUrlFromRequest($Request, $canonical);
     }
 
     /**
      * Get the URL from the Request
      *
-     * @param Request $Request
-     * @return string the url
      */
-    public static function getUrlFromRequest(Request $Request): string
+    public static function getUrlFromRequest(Request $Request, bool $canonical = false): string
     {
-        $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort() . $Request->getBasePath();
+        $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort();
+        if (!$canonical) {
+            $url .= $Request->getBasePath();
+        }
         return \str_replace('app/controllers', '', $url);
     }
 
@@ -317,12 +319,16 @@ class Tools
      * @param string $query the searched string
      * @param string $andor behavior of the space character
      * @param string $column the column to search into
-     * @param string $table on which table to do the search
+     * @param bool $isStrict do we add wildcard characters on each side of the query?
      * @return string
      */
-    public static function getSearchSql(string $query, string $andor = 'and', string $column = '', string $table = ''): string
+    public static function getSearchSql(string $query, string $andor = 'and', string $column = '', bool $isStrict = false): string
     {
         $sql = ' AND ';
+        $wildcard = '%';
+        if ($isStrict) {
+            $wildcard = '';
+        }
         // search character is the separator for and/or
         $qArr = explode(' ', $query);
         $sql .= '(';
@@ -333,15 +339,10 @@ class Tools
             }
             if ($column === '') {
                 // do quicksearch
-                $elabidSql = '';
-                if ($table === 'experiments') {
-                    // add elabid to the search columns
-                    $elabidSql = " OR entity.elabid LIKE '%$value%'";
-                }
-                $sql .= "(entity.title LIKE '%$value%' OR entity.date LIKE '%$value%' OR entity.body LIKE '%$value%' $elabidSql)";
+                $sql .= "(entity.title LIKE '%$value%' OR entity.date LIKE '%$value%' OR entity.body LIKE '%$value%' OR entity.elabid LIKE '%$value%')";
             } else {
                 // from search page
-                $sql .= 'entity.' . $column . " LIKE '%$value%'";
+                $sql .= 'entity.' . $column . " LIKE '" . $wildcard . $value . $wildcard . "'";
             }
         }
         return $sql . ')';

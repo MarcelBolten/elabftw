@@ -16,9 +16,10 @@ use Elabftw\Exceptions\DatabaseErrorException;
 use Elabftw\Exceptions\FilesystemErrorException;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Models\Database;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 use Elabftw\Models\Revisions;
+use Elabftw\Models\Templates;
 use Exception;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -35,8 +36,10 @@ $Response->prepare($Request);
 try {
     if ($Request->query->get('type') === 'experiments') {
         $Entity = new Experiments($App->Users);
+    } elseif ($Request->query->get('type') === 'experiments_templates') {
+        $Entity = new Templates($App->Users);
     } elseif ($Request->query->get('type') === 'items') {
-        $Entity = new Database($App->Users);
+        $Entity = new Items($App->Users);
     } else {
         throw new IllegalActionException('Bad type!');
     }
@@ -44,7 +47,11 @@ try {
     $Entity->setId((int) $Request->query->get('item_id'));
     $Entity->canOrExplode('write');
 
-    $Revisions = new Revisions($Entity);
+    $Revisions = new Revisions(
+        $Entity,
+        (int) $App->Config->configArr['max_revisions'],
+        (int) $App->Config->configArr['min_delta_revisions'],
+    );
     $revisionsArr = $Revisions->readAll();
 
     $template = 'revisions.html';

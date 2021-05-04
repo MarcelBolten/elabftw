@@ -24,20 +24,15 @@ use LdapRecord\Connection;
  */
 class LdapAuth implements AuthInterface
 {
-    /** @var Connection $connection */
-    private $connection;
+    private Connection $connection;
 
-    /** @var string $email */
-    private $email = '';
+    private string $email = '';
 
-    /** @var string $password */
-    private $password = '';
+    private string $password = '';
 
-    /** @var AuthResponse $AuthResponse */
-    private $AuthResponse;
+    private AuthResponse $AuthResponse;
 
-    /** @var array $configArr */
-    private $configArr;
+    private array $configArr;
 
     public function __construct(Connection $connection, array $configArr, string $email, string $password)
     {
@@ -58,25 +53,35 @@ class LdapAuth implements AuthInterface
             throw new InvalidCredentialsException();
         }
         $Users = new Users();
+        $Teams = new Teams($Users);
         try {
             $Users->populateFromEmail($this->email);
         } catch (ResourceNotFoundException $e) {
             // the user doesn't exist yet in the db
+            // what do we do? Lookup the config setting for that case
+            if ($this->configArr['saml_user_default'] === '0') {
+                throw new ImproperActionException('Could not find an existing user. Ask a Sysadmin to create your account.');
+            }
             // GET FIRSTNAME AND LASTNAME
             $firstname = $record[$this->configArr['ldap_firstname']][0] ?? 'Unknown';
             $lastname = $record[$this->configArr['ldap_lastname']][0] ?? 'Unknown';
             // GET TEAMS
-            $teams = $record[$this->configArr['ldap_team']][0];
+            $teamFromLdap = $record[$this->configArr['ldap_team']][0];
             // if no team attribute is sent by the LDAP server, use the default team
-            if (empty($teams)) {
+            if (empty($teamFromLdap)) {
                 // we directly get the id from the stored config
                 $teamId = (int) $this->configArr['saml_team_default'];
                 if ($teamId === 0) {
                     throw new ImproperActionException('Could not find team ID to assign user!');
                 }
-                $Teams = new Teams($Users);
-                $teams = $Teams->getTeamsFromIdOrNameOrOrgidArray(array($teamId))[0];
+                $teamFromLdap = array($teamId);
+            } else {
+                if (is_string($teamFromLdap)) {
+                    $teamFromLdap = array($teamFromLdap);
+                }
             }
+            // normalize the team(s)
+            $teams = $Teams->getTeamsFromIdOrNameOrOrgidArray($teamFromLdap)[0];
             // CREATE USER (and force validation of user)
             $Users = new Users($Users->create($this->email, $teams, $firstname, $lastname, '', null, true));
         }

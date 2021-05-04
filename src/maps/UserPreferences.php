@@ -25,75 +25,62 @@ use PDO;
  */
 class UserPreferences implements MapInterface
 {
-    /** @var Db $Db */
-    private $Db;
+    private Db $Db;
 
-    /** @var int $id */
-    private $id;
+    private int $id;
 
-    /** @var int $limit */
-    private $limit = 15;
+    private int $limit = 15;
 
-    /** @var string $displaySize */
-    private $displaySize = 'lg';
+    private string $displaySize = 'lg';
 
-    /** @var string $orderby */
-    private $orderby = 'date';
+    // Can have two values: 'it' for item list (the default mode),
+    // and 'tb' for tabular view
+    private string $displayMode = 'it';
 
-    /** @var int $singleColumnLayout */
-    private $singleColumnLayout = 0;
+    private string $orderby = 'date';
+
+    private int $singleColumnLayout = 0;
+
+    private int $uploadsLayout = 1;
 
     /** @var array<string, string> $shortcuts */
-    private $shortcuts = array(
+    private array $shortcuts = array(
         'create' => 'c',
         'edit' => 'e',
         'submit' => 's',
         'todo' => 't',
     );
 
-    /** @var string $sort */
-    private $sort = 'desc';
+    private string $sort = 'desc';
 
-    /** @var int $showTeam */
-    private $showTeam = 0;
+    private int $showTeam = 0;
 
-    /** @var int $showTeamTemplates */
-    private $showTeamTemplates = 0;
+    private int $showTeamTemplates = 0;
 
-    /** @var int $cjkFonts */
-    private $cjkFonts = 0;
+    private int $showPublic = 0;
 
-    /** @var int $pdfa */
-    private $pdfa = 1;
+    private int $cjkFonts = 0;
 
-    /** @var string $pdfFormat */
-    private $pdfFormat = 'A4';
+    private int $pdfa = 1;
 
-    /** @var int $useMarkdown */
-    private $useMarkdown = 0;
+    private string $pdfFormat = 'A4';
 
-    /** @var int $incFilesPdf */
-    private $incFilesPdf = 1;
+    private int $useMarkdown = 0;
 
-    /** @var int $chemEditor */
-    private $chemEditor = 0;
+    private int $useIsodate = 0;
 
-    /** @var int $jsonEditor */
-    private $jsonEditor = 0;
+    private int $incFilesPdf = 1;
 
-    /** @var string $lang */
-    private $lang = 'en_GB';
+    private int $chemEditor = 0;
 
-    /** @var string $defaultRead */
-    private $defaultRead = 'team';
+    private int $jsonEditor = 0;
 
-    /** @var string $defaultWrite */
-    private $defaultWrite = 'user';
+    private string $lang = 'en_GB';
 
-    /**
-     * Constructor
-     *
-     */
+    private string $defaultRead = 'team';
+
+    private string $defaultWrite = 'user';
+
     public function __construct(int $id)
     {
         $this->id = $id;
@@ -106,6 +93,7 @@ class UserPreferences implements MapInterface
         $sql = 'UPDATE users SET
             limit_nb = :new_limit,
             display_size = :new_display_size,
+            display_mode = :new_display_mode,
             orderby = :new_orderby,
             sort = :new_sort,
             sc_create = :new_sc_create,
@@ -114,21 +102,25 @@ class UserPreferences implements MapInterface
             sc_todo = :new_sc_todo,
             show_team = :new_show_team,
             show_team_templates = :new_show_team_templates,
+            show_public = :new_show_public,
             chem_editor = :new_chem_editor,
             json_editor = :new_json_editor,
             lang = :new_lang,
             default_read = :new_default_read,
             default_write = :new_default_write,
             single_column_layout = :new_layout,
+            uploads_layout = :new_uploads_layout,
             cjk_fonts = :new_cjk_fonts,
             pdfa = :new_pdfa,
             pdf_format = :new_pdf_format,
             use_markdown = :new_use_markdown,
+            use_isodate = :new_use_isodate,
             inc_files_pdf = :new_inc_files_pdf
             WHERE userid = :userid;';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':new_limit', $this->limit);
         $req->bindParam(':new_display_size', $this->displaySize);
+        $req->bindParam(':new_display_mode', $this->displayMode);
         $req->bindParam(':new_orderby', $this->orderby);
         $req->bindParam(':new_sort', $this->sort);
         $req->bindParam(':new_sc_create', $this->shortcuts['create']);
@@ -137,16 +129,19 @@ class UserPreferences implements MapInterface
         $req->bindParam(':new_sc_todo', $this->shortcuts['todo']);
         $req->bindParam(':new_show_team', $this->showTeam);
         $req->bindParam(':new_show_team_templates', $this->showTeamTemplates);
+        $req->bindParam(':new_show_public', $this->showPublic);
         $req->bindParam(':new_chem_editor', $this->chemEditor);
         $req->bindParam(':new_json_editor', $this->jsonEditor);
         $req->bindParam(':new_lang', $this->lang);
         $req->bindParam(':new_default_read', $this->defaultRead);
         $req->bindParam(':new_default_write', $this->defaultWrite);
         $req->bindParam(':new_layout', $this->singleColumnLayout);
+        $req->bindParam(':new_uploads_layout', $this->uploadsLayout);
         $req->bindParam(':new_cjk_fonts', $this->cjkFonts);
         $req->bindParam(':new_pdfa', $this->pdfa);
         $req->bindParam(':new_pdf_format', $this->pdfFormat);
         $req->bindParam(':new_use_markdown', $this->useMarkdown);
+        $req->bindParam(':new_use_isodate', $this->useIsodate);
         $req->bindParam(':new_inc_files_pdf', $this->incFilesPdf);
         $req->bindParam(':userid', $this->id, PDO::PARAM_INT);
         return $this->Db->execute($req);
@@ -162,6 +157,11 @@ class UserPreferences implements MapInterface
         $this->displaySize = Check::displaySize($setting);
     }
 
+    final public function setDisplayMode(string $setting): void
+    {
+        $this->displayMode = Check::displayMode($setting);
+    }
+
     final public function setSort(string $setting): void
     {
         $this->sort = Check::sort($setting);
@@ -175,6 +175,11 @@ class UserPreferences implements MapInterface
     final public function setSingleColumnLayout(string $setting): void
     {
         $this->singleColumnLayout = Filter::toBinary($setting);
+    }
+
+    final public function setUploadsLayout(string $setting): void
+    {
+        $this->uploadsLayout = Filter::toBinary($setting);
     }
 
     final public function setShortcut(string $shortcut, string $setting): void
@@ -194,6 +199,11 @@ class UserPreferences implements MapInterface
     final public function setShowTeamTemplates(string $setting): void
     {
         $this->showTeamTemplates = Filter::toBinary($setting);
+    }
+
+    final public function setShowPublic(string $setting): void
+    {
+        $this->showPublic = Filter::toBinary($setting);
     }
 
     final public function setCjkFonts(string $setting): void
@@ -217,6 +227,11 @@ class UserPreferences implements MapInterface
     final public function setUseMarkdown(string $setting): void
     {
         $this->useMarkdown = Filter::toBinary($setting);
+    }
+
+    final public function setUseIsodate(string $setting): void
+    {
+        $this->useIsodate = Filter::toBinary($setting);
     }
 
     final public function setIncFilesPdf(string $setting): void
@@ -256,26 +271,29 @@ class UserPreferences implements MapInterface
      * Source can be sql query or post data
      *
      * @param array<string, mixed> $source
-     * @return void
      */
     public function hydrate(array $source): void
     {
         $this->setLimit($source['limit_nb'] ?? $this->limit);
         $this->setLang($source['lang'] ?? $this->lang);
         $this->setDisplaySize($source['display_size'] ?? $this->displaySize);
+        $this->setDisplayMode($source['display_mode'] ?? $this->displayMode);
         $this->setSort($source['sort'] ?? $this->sort);
         $this->setOrderby($source['orderby'] ?? $this->orderby);
         $this->setSingleColumnLayout($source['single_column_layout'] ?? '0');
+        $this->setUploadsLayout($source['uploads_layout'] ?? '0');
         $this->setShortcut('create', $source['sc_create'] ?? $this->shortcuts['create']);
         $this->setShortcut('edit', $source['sc_edit'] ?? $this->shortcuts['edit']);
         $this->setShortcut('submit', $source['sc_submit'] ?? $this->shortcuts['submit']);
         $this->setShortcut('todo', $source['sc_todo'] ?? $this->shortcuts['todo']);
         $this->setShowTeam($source['show_team'] ?? '0');
         $this->setShowTeamTemplates($source['show_team_templates'] ?? '0');
+        $this->setShowPublic($source['show_public'] ?? '0');
         $this->setCjkFonts($source['cjk_fonts'] ?? '0');
         $this->setPdfa($source['pdfa'] ?? '0');
         $this->setPdfFormat($source['pdf_format'] ?? $this->pdfFormat);
         $this->setUseMarkdown($source['use_markdown'] ?? '0');
+        $this->setUseIsodate($source['use_isodate'] ?? '0');
         $this->setIncFilesPdf($source['inc_files_pdf'] ?? '0');
         $this->setChemEditor($source['chem_editor'] ?? '0');
         $this->setJsonEditor($source['json_editor'] ?? '0');
@@ -285,26 +303,28 @@ class UserPreferences implements MapInterface
 
     /**
      * Read from the current team
-     *
-     * @return array
      */
     private function read(): array
     {
         $sql = 'SELECT limit_nb,
             display_size,
+            display_mode,
             sort,
             orderby,
             single_column_layout,
+            uploads_layout,
             sc_create,
             sc_edit,
             sc_submit,
             sc_todo,
             show_team,
             show_team_templates,
+            show_public,
             cjk_fonts,
             pdfa,
             pdf_format,
             use_markdown,
+            use_isodate,
             inc_files_pdf,
             chem_editor,
             json_editor,

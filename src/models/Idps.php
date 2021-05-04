@@ -13,23 +13,22 @@ namespace Elabftw\Models;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\DestroyableInterface;
+use Elabftw\Traits\SetIdTrait;
 use PDO;
 
 /**
- * Store informations about different identity providers for auth with SAML
+ * Store information about different identity providers for auth with SAML
  */
 class Idps implements DestroyableInterface
 {
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    use SetIdTrait;
 
-    /**
-     * Constructor
-     *
-     */
-    public function __construct()
+    protected Db $Db;
+
+    public function __construct(?int $id = null)
     {
         $this->Db = Db::getConnection();
+        $this->id = $id;
     }
 
     /**
@@ -66,8 +65,6 @@ class Idps implements DestroyableInterface
 
     /**
      * Read all IDPs
-     *
-     * @return array
      */
     public function readAll(): array
     {
@@ -123,8 +120,6 @@ class Idps implements DestroyableInterface
 
     /**
      * Get an active IDP
-     *
-     * @return array
      */
     public function getActive(?int $id = null): array
     {
@@ -145,14 +140,12 @@ class Idps implements DestroyableInterface
         return $res;
     }
 
-    /**
-     * Destroy an IDP
-     */
-    public function destroy(int $id): bool
+    public function destroy(): bool
     {
         $sql = 'DELETE FROM idps WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+
         return $this->Db->execute($req);
     }
 }

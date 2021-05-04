@@ -22,17 +22,13 @@ use Monolog\Logger;
  */
 class ExternalAuth implements AuthInterface
 {
-    /** @var AuthResponse $AuthResponse */
-    private $AuthResponse;
+    private AuthResponse $AuthResponse;
 
-    /** @var array $configArr */
-    private $configArr;
+    private array $configArr;
 
-    /** @var Logger $log */
-    private $log;
+    private Logger $log;
 
-    /** @var array $serverParams */
-    private $serverParams;
+    private array $serverParams;
 
     public function __construct(array $configArr, array $serverParams, Logger $log)
     {
@@ -66,6 +62,10 @@ class ExternalAuth implements AuthInterface
             $Users->populateFromEmail($email);
         } catch (ResourceNotFoundException $e) {
             // the user doesn't exist yet in the db
+            // what do we do? Lookup the config setting for that case
+            if ($this->configArr['saml_user_default'] === '0') {
+                throw new ImproperActionException('Could not find an existing user. Ask a Sysadmin to create your account.');
+            }
             // CREATE USER (and force validation of user)
             $Users->create($email, $teams, $firstname, $lastname, '', null, true);
             $Users->populateFromEmail($email);

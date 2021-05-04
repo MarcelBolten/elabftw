@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Elabftw\Models;
 
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\Db;
 use PDO;
 
@@ -18,11 +19,9 @@ use PDO;
  */
 class Pins
 {
-    /** @var Db $Db */
-    private $Db;
+    private Db $Db;
 
-    /** @var AbstractEntity $Entity */
-    private $Entity;
+    private AbstractEntity $Entity;
 
     public function __construct(AbstractEntity $entity)
     {
@@ -32,8 +31,6 @@ class Pins
 
     /**
      * Check if the current entity is pin of current user
-     *
-     * @return bool
      */
     public function isPinned(): bool
     {
@@ -49,8 +46,6 @@ class Pins
 
     /**
      * Add/remove current entity as pinned for current user
-     *
-     * @return void
      */
     public function togglePin(): void
     {
@@ -59,8 +54,6 @@ class Pins
 
     /**
      * Get the items pinned by current users to display in show mode
-     *
-     * @return array
      */
     public function getPinned(): array
     {
@@ -79,7 +72,7 @@ class Pins
         $entity = clone $this->Entity;
         foreach ($ids as $id) {
             $entity->setId((int) $id['entity_id']);
-            $pinArr[] = $entity->read();
+            $pinArr[] = $entity->read(new ContentParams());
         }
         return $pinArr;
     }
@@ -87,20 +80,18 @@ class Pins
     /**
      * Remove all traces of that entity because it has been destroyed
      */
-    public function cleanup(): void
+    public function cleanup(): bool
     {
         $sql = 'DELETE FROM pin2users WHERE entity_id = :entity_id AND type = :type';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':entity_id', $this->Entity->id, PDO::PARAM_INT);
         $req->bindParam(':type', $this->Entity->type);
 
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
      * Remove current entity from pinned of current user
-     *
-     * @return void
      */
     private function rmFromPinned(): void
     {
@@ -117,8 +108,6 @@ class Pins
 
     /**
      * Add current entity to pinned of current user
-     *
-     * @return void
      */
     private function addToPinned(): void
     {

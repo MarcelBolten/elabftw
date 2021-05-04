@@ -11,65 +11,61 @@ declare(strict_types=1);
 namespace Elabftw\Models;
 
 use Elabftw\Elabftw\Db;
-use Elabftw\Elabftw\ParamsProcessor;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Traits\EntityTrait;
+use Elabftw\Interfaces\ContentParamsInterface;
+use Elabftw\Interfaces\ItemTypeParamsInterface;
+use Elabftw\Traits\SortableTrait;
 use PDO;
 
 /**
  * The kind of items you can have in the database for a team
  */
-class ItemsTypes extends AbstractCategory
+class ItemsTypes extends AbstractEntity
 {
-    use EntityTrait;
+    use SortableTrait;
 
-    /**
-     * Constructor
-     *
-     * @param Users $users
-     * @param int|null $id
-     */
-    public function __construct(Users $users, ?int $id = null)
+    private int $team;
+
+    public function __construct(int $team, ?int $id = null)
     {
         $this->Db = Db::getConnection();
-        $this->Users = $users;
+        $this->team = $team;
+        $this->type = 'items_types';
         if ($id !== null) {
             $this->setId($id);
         }
     }
 
-    /**
-     * Create an item type
-     *
-     */
-    public function create(ParamsProcessor $params, ?int $team = null): int
+    public function create(ItemTypeParamsInterface $params): int
     {
-        if ($team === null) {
-            $team = $this->Users->userData['team'];
-        }
-
-        $sql = 'INSERT INTO items_types(name, color, bookable, template, team)
-            VALUES(:name, :color, :bookable, :template, :team)';
+        $sql = 'INSERT INTO items_types(name, color, bookable, template, team, canread, canwrite)
+            VALUES(:content, :color, :bookable, :body, :team, :canread, :canwrite)';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':name', $params->name, PDO::PARAM_STR);
-        $req->bindParam(':color', $params->color, PDO::PARAM_STR);
-        $req->bindParam(':bookable', $params->bookable, PDO::PARAM_INT);
-        $req->bindParam(':template', $params->template, PDO::PARAM_STR);
-        $req->bindParam(':team', $team, PDO::PARAM_INT);
+        $req->bindValue(':content', $params->getContent(), PDO::PARAM_STR);
+        $req->bindValue(':color', $params->getColor(), PDO::PARAM_STR);
+        $req->bindValue(':bookable', $params->getIsBookable(), PDO::PARAM_INT);
+        $req->bindValue(':body', $params->getBody(), PDO::PARAM_STR);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+        $req->bindValue(':canread', $params->getCanread(), PDO::PARAM_STR);
+        $req->bindValue(':canwrite', $params->getCanwriteS(), PDO::PARAM_STR);
         $this->Db->execute($req);
 
         return $this->Db->lastInsertId();
     }
 
     /**
-     * Read the body (template) of the item_type from an id
+     * Read the body (template) and default permissions of the item_type from an id
      */
-    public function read(): array
+    public function read(ContentParamsInterface $params): array
     {
-        $sql = 'SELECT template FROM items_types WHERE id = :id AND team = :team';
+        if ($params->getTarget() === 'all') {
+            return $this->readAll();
+        }
+
+        $sql = 'SELECT template, canread, canwrite, metadata FROM items_types WHERE id = :id AND team = :team';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $req->bindParam(':team', $this->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
         $this->Db->execute($req);
 
         if ($req->rowCount() === 0) {
@@ -84,35 +80,9 @@ class ItemsTypes extends AbstractCategory
     }
 
     /**
-     * SQL to get all items type
-     *
-     * @return array all the items types for the team
-     */
-    public function readAll(): array
-    {
-        $sql = 'SELECT items_types.id AS category_id,
-            items_types.name AS category,
-            items_types.color,
-            items_types.bookable,
-            items_types.template,
-            items_types.ordering
-            FROM items_types WHERE team = :team ORDER BY ordering ASC';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':team', $this->Users->userData['team'], PDO::PARAM_INT);
-        $this->Db->execute($req);
-
-        $res = $req->fetchAll();
-        if ($res === false) {
-            return array();
-        }
-        return $res;
-    }
-
-    /**
      * Get the color of an item type
      *
      * @param int $id ID of the category
-     * @return string
      */
     public function readColor(int $id): string
     {
@@ -128,69 +98,89 @@ class ItemsTypes extends AbstractCategory
         return (string) $res;
     }
 
-    /**
-     * Update an item type
-     *
-     */
-    public function update(ParamsProcessor $params): string
+    public function duplicate(): int
+    {
+        return 1;
+    }
+
+    public function updateAll(ItemTypeParamsInterface $params): bool
     {
         $sql = 'UPDATE items_types SET
             name = :name,
             team = :team,
             color = :color,
             bookable = :bookable,
-            template = :template
+            template = :template,
+            canread = :canread,
+            canwrite = :canwrite
             WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':name', $params->name, PDO::PARAM_STR);
-        $req->bindParam(':color', $params->color, PDO::PARAM_STR);
-        $req->bindParam(':bookable', $params->bookable, PDO::PARAM_INT);
-        $req->bindParam(':template', $params->template, PDO::PARAM_STR);
-        $req->bindParam(':team', $this->Users->userData['team'], PDO::PARAM_INT);
-        $req->bindParam(':id', $params->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
+        $req->bindValue(':name', $params->getContent(), PDO::PARAM_STR);
+        $req->bindValue(':color', $params->getColor(), PDO::PARAM_STR);
+        $req->bindValue(':bookable', $params->getIsBookable(), PDO::PARAM_INT);
+        $req->bindValue(':template', $params->getBody(), PDO::PARAM_STR);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+        $req->bindValue(':canread', $params->getCanread(), PDO::PARAM_STR);
+        $req->bindValue(':canwrite', $params->getCanwriteS(), PDO::PARAM_STR);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
 
-        return $params->template;
+        return $this->Db->execute($req);
     }
 
     /**
      * Destroy an item type
      *
      */
-    public function destroy(int $id): bool
+    public function destroy(): bool
     {
         // don't allow deletion of an item type with items
-        if ($this->countItems($id) > 0) {
+        if ($this->countItems() > 0) {
             throw new ImproperActionException(_('Remove all database items with this type before deleting this type.'));
         }
         $sql = 'DELETE FROM items_types WHERE id = :id AND team = :team';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
-        $req->bindParam(':team', $this->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindValue(':id', $this->id, PDO::PARAM_INT);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+
         return $this->Db->execute($req);
     }
 
     /**
-     * Not implemented
-     *
-     * @return void
+     * SQL to get all items type
      */
-    public function destroyAll(): void
+    public function readAll(bool $getTags = true): array
     {
+        $sql = 'SELECT items_types.id AS category_id,
+            items_types.name AS category,
+            items_types.color,
+            items_types.bookable,
+            items_types.template,
+            items_types.ordering,
+            items_types.canread,
+            items_types.canwrite
+            FROM items_types WHERE team = :team ORDER BY ordering ASC';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+        $this->Db->execute($req);
+
+        $res = $req->fetchAll();
+        if ($res === false) {
+            return array();
+        }
+        return $res;
     }
 
     /**
      * Count all items of this type
-     *
-     * @param int $id of the type
-     * @return int
+     * TODO have a countable interface and maybe counttrait to merge this function with Status
      */
-    protected function countItems(int $id): int
+    protected function countItems(): int
     {
-        $sql = 'SELECT COUNT(*) FROM items WHERE category = :category';
+        $sql = 'SELECT COUNT(id) FROM items WHERE category = :category';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':category', $id, PDO::PARAM_INT);
+        $req->bindParam(':category', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
+
         return (int) $req->fetchColumn();
     }
 }

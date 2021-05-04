@@ -20,7 +20,6 @@ use Elabftw\Models\Status;
 use Elabftw\Models\Tags;
 use Elabftw\Models\TeamGroups;
 use Elabftw\Models\Teams;
-use Elabftw\Models\Templates;
 use Elabftw\Services\UsersHelper;
 use Exception;
 use Symfony\Component\HttpFoundation\Response;
@@ -42,18 +41,16 @@ try {
         throw new IllegalActionException('Non admin user tried to access admin controller.');
     }
 
-    $ItemsTypes = new ItemsTypes($App->Users);
-    $Status = new Status($App->Users);
+    $ItemsTypes = new ItemsTypes($App->Users->team);
+    $Status = new Status($App->Users->team);
     $Tags = new Tags(new Experiments($App->Users));
     $TeamGroups = new TeamGroups($App->Users);
     $Teams = new Teams($App->Users);
-    $Templates = new Templates($App->Users);
 
     $itemsTypesArr = $ItemsTypes->readAll();
-    $statusArr = $Status->read();
-    $teamGroupsArr = $TeamGroups->read();
+    $statusArr = $Status->read(new ContentParams());
+    $teamGroupsArr = $TeamGroups->read(new ContentParams());
     $teamsArr = $Teams->readAll();
-    $commonTplBody = $Templates->readCommonBody();
     $allTeamUsersArr = $App->Users->readAllFromTeam();
     // only the unvalidated ones
     $unvalidatedUsersArr = array_filter($allTeamUsersArr, function ($u) {
@@ -86,7 +83,6 @@ try {
         'teamGroupsArr' => $teamGroupsArr,
         'visibilityArr' => $TeamGroups->getVisibilityList(),
         'teamsArr' => $teamsArr,
-        'commonTplBody' => $commonTplBody,
         'unvalidatedUsersArr' => $unvalidatedUsersArr,
         'usersArr' => $usersArr,
     );

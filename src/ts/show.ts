@@ -7,19 +7,35 @@
  */
 declare let key: any;
 declare let MathJax: any;
-import { insertParamAndReload, notif } from './misc';
+import { getCheckedBoxes, insertParamAndReload, notif, reloadTagsAndLocks } from './misc';
+import { EntityType } from './interfaces';
 import 'bootstrap/js/src/modal.js';
 import i18next from 'i18next';
-import { CheckableItem } from './interfaces';
+import EntityClass from './Entity.class';
 
 $(document).ready(function(){
-  if ($('#info').data('page') !== 'show') {
+  if (!document.getElementById('info')) {
+    return;
+  }
+  const about = document.getElementById('info').dataset;
+  // only run in show mode or on search page (which is kinda show mode too)
+  const pages = ['show', 'search'];
+  if (!pages.includes(about.page)) {
     return;
   }
 
-  // CREATE EXPERIMENT
+  let entityType = EntityType.Experiment;
+  if ($('#type').data('type') === 'items') {
+    entityType = EntityType.Item;
+  }
+
+  const EntityC = new EntityClass(entityType);
+
+  // CREATE EXPERIMENT with shortcut
   key($('#shortcuts').data('create'), function() {
-    window.location.href = 'experiments.php?create=true';
+    EntityC.create('0').then(json => {
+      window.location.href = `experiments.php?mode=edit&id=${json.res}`;
+    });
   });
 
   // validate the form upon change. fix #451
@@ -56,34 +72,16 @@ $(document).ready(function(){
     });
   });
 
-  // PAGINATION
-  // previous page
-  $('.pageButtons').on('click', '.previousPage', function() {
-    insertParamAndReload('offset', $('#info').data('offset') - $('#info').data('limit'));
-  });
-  // next page
-  $('.pageButtons').on('click', '.nextPage', function() {
-    insertParamAndReload('offset', $('#info').data('offset') + $('#info').data('limit'));
-  });
-  // END PAGINATION
-
   // THE CHECKBOXES
-  function getCheckedBoxes(): Array<CheckableItem> {
-    const checkedBoxes = [];
-    $('input[type=checkbox]:checked').each(function() {
-      checkedBoxes.push({
-        id: $(this).data('id'),
-        // the randomid is used to get the parent container and hide it when delete
-        randomid: $(this).data('randomid'),
-      });
-    });
-    return checkedBoxes;
-  }
+  const nothingSelectedError = {
+    'msg': i18next.t('nothing-selected'),
+    'res': false,
+  };
 
   const bgColor = '#c4f9ff';
 
   // CHECK A BOX
-  $('input[type=checkbox]').on('click', function() {
+  $('.item input[type=checkbox]').on('click', function() {
     if ($(this).prop('checked')) {
       $(this).parent().parent().css('background-color', bgColor);
     } else {
@@ -107,8 +105,8 @@ $(document).ready(function(){
 
   // SELECT ALL
   $('#selectAllBoxes').on('click', function() {
-    $('input[type=checkbox]').prop('checked', true);
-    $('input[type=checkbox]').parent().parent().css('background-color', bgColor);
+    $('.item input[type=checkbox]').prop('checked', true);
+    $('.item input[type=checkbox]').parent().parent().css('background-color', bgColor);
     $('#advancedSelectOptions').show();
     $('#withSelected').show();
     // also disable pagination because this will select all even the hidden ones
@@ -119,8 +117,8 @@ $(document).ready(function(){
 
   // UNSELECT ALL
   $('#unselectAllBoxes').on('click', function() {
-    $('input:checkbox').prop('checked', false);
-    $('input[type=checkbox]').parent().parent().css('background-color', '');
+    $('.item input:checkbox').prop('checked', false);
+    $('.item input[type=checkbox]').parent().parent().css('background-color', '');
     // hide menu
     $('#withSelected').hide();
     $('#advancedSelectOptions').hide();
@@ -128,7 +126,7 @@ $(document).ready(function(){
 
   // INVERT SELECTION
   $('#invertSelection').on('click', function() {
-    ($('input[type=checkbox]') as any).each(function () {
+    ($('.item input[type=checkbox]') as JQuery<HTMLInputElement>).each(function () {
       this.checked = !this.checked;
       if ($(this).prop('checked')) {
         $(this).parent().parent().css('background-color', bgColor);
@@ -142,7 +140,7 @@ $(document).ready(function(){
   $('#withSelected').hide();
   // no need to show the unselect/invert links if no one is selected
   $('#advancedSelectOptions').hide();
-  $('input[type=checkbox]').on('click', function() {
+  $('.item input[type=checkbox]').on('click', function() {
     $('#advancedSelectOptions').show();
     $('#withSelected').show();
   });
@@ -153,11 +151,7 @@ $(document).ready(function(){
     // get the item id of all checked boxes
     const checked = getCheckedBoxes();
     if (checked.length === 0) {
-      const json = {
-        'msg': 'Nothing selected!',
-        'res': false
-      };
-      notif(json);
+      notif(nothingSelectedError);
       return;
     }
     // loop on it and update the status/item type
@@ -177,17 +171,13 @@ $(document).ready(function(){
     });
   });
 
-  // UPDATE THE VISIBILTY OF AN EXPERIMENT ON SELECT CHANGE
+  // UPDATE THE VISIBILITY OF AN EXPERIMENT ON SELECT CHANGE
   $('#visChecked').on('change', function() {
     const ajaxs = [];
     // get the item id of all checked boxes
     const checked = getCheckedBoxes();
     if (checked.length === 0) {
-      const json = {
-        'msg': 'Nothing selected!',
-        'res': false
-      };
-      notif(json);
+      notif(nothingSelectedError);
       return;
     }
     // loop on it and update the status/item type
@@ -214,14 +204,51 @@ $(document).ready(function(){
     const what = $('#exportChecked').val();
     const checked = getCheckedBoxes();
     if (checked.length === 0) {
-      const json = {
-        'msg': 'Nothing selected!',
-        'res': false
-      };
-      notif(json);
+      notif(nothingSelectedError);
       return;
     }
     window.location.href = `make.php?what=${what}&type=${$('#type').data('type')}&id=${checked.map(value => value.id).join('+')}`;
+  });
+
+  // THE LOCK BUTTON FOR CHECKED BOXES
+  $('#lockChecked').on('click', function() {
+    // get the item id of all checked boxes
+    const checked = getCheckedBoxes();
+    if (checked.length === 0) {
+      notif(nothingSelectedError);
+      return;
+    }
+
+    // loop over it and lock entities
+    const results = [];
+    checked.forEach(checkBox => {
+      results.push(EntityC.lock(checkBox['id']));
+    });
+
+    Promise.all(results).then(() => {
+      reloadTagsAndLocks('itemList');
+      reloadTagsAndLocks('item-table');
+    });
+  });
+
+  // THE TIMESTAMP BUTTON FOR CHECKED BOXES
+  $('#timestampChecked').on('click', function() {
+    // get the item id of all checked boxes
+    const checked = getCheckedBoxes();
+    if (checked.length === 0) {
+      notif(nothingSelectedError);
+      return;
+    }
+    // loop on it and delete stuff
+    $.each(checked, function(index) {
+      $.post('app/controllers/EntityAjaxController.php', {
+        timestamp: true,
+        type: 'experiments',
+        id: checked[index]['id'],
+      }).done(function(json) {
+        notif(json);
+      });
+    });
   });
 
   // THE DELETE BUTTON FOR CHECKED BOXES
@@ -229,11 +256,7 @@ $(document).ready(function(){
     // get the item id of all checked boxes
     const checked = getCheckedBoxes();
     if (checked.length === 0) {
-      const json = {
-        'msg': 'Nothing selected!',
-        'res': false
-      };
-      notif(json);
+      notif(nothingSelectedError);
       return;
     }
     if (!confirm(i18next.t('entity-delete-warning'))) {
@@ -241,16 +264,61 @@ $(document).ready(function(){
     }
     // loop on it and delete stuff
     $.each(checked, function(index) {
-      $.post('app/controllers/EntityAjaxController.php', {
-        destroy: true,
-        id: checked[index]['id'],
-        type: $('#type').data('type')
-      }).done(function(json) {
-        notif(json);
+      EntityC.destroy(checked[index]['id']).then(json => {
         if (json.res) {
           $('#parent_' + checked[index]['randomid']).hide(200);
         }
       });
     });
+  });
+
+  // change sort-icon based on sort value: asc or desc
+  $('.orderBy').each(function() {
+    if ($('select[name="order"]').val() === $(this).data('orderby')) {
+      $(this).find('[data-fa-i2svg]').removeClass('fa-sort').addClass($('select[name="sort"]').val() === 'asc' ? 'fa-sort-up': 'fa-sort-down');
+    }
+  });
+
+  // Sort column in tabular mode
+  $(document).on('click', '.orderBy', function() {
+    // The attribute data-orderby of the anchor element next to the title contains the value of the corresponding
+    // option of the select field <select name='order'> that will be selected in the form.
+    // For example: <a class='clickable orderBy' data-orderby='title'>...</a>, will select the option 'title'
+    // in the <select name='order'>
+    const targetSort = $(this).data('orderby');
+    const selectOrder = $('select[name="order"]');
+    const selectSort = $('select[name="sort"]');
+
+    // I guess the default expectation is sort ascending, but if the user clicks twice, the
+    // order should invert. For this, we check whether the select value is already set
+    // to targetSort
+    if (selectOrder.val() == targetSort) {
+      selectSort.val(selectSort.val() == 'desc' ? 'asc': 'desc' );
+    } else {
+      $('select[name="sort"]').val('asc');
+    }
+    selectOrder.val(targetSort);
+    selectOrder.closest('form').trigger('submit');
+  });
+
+  // Add click listener and do action based on which element is clicked
+  document.querySelector('.real-container').addEventListener('click', (event) => {
+    const el = (event.target as HTMLElement);
+    // PAGINATION
+    // previous page
+    if (el.matches('[data-action="previous-page"]')) {
+      const info = (document.querySelector('#info') as HTMLElement);
+      const offset = parseInt(info.dataset.offset);
+      const limit = parseInt(info.dataset.limit);
+      insertParamAndReload('offset', offset - limit);
+
+    // next page
+    } else if (el.matches('[data-action="next-page"]')) {
+      const info = (document.querySelector('#info') as HTMLElement);
+      const offset = parseInt(info.dataset.offset);
+      const limit = parseInt(info.dataset.limit);
+      insertParamAndReload('offset', offset + limit);
+    // END PAGINATION
+    }
   });
 });

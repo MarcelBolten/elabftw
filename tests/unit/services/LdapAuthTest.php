@@ -10,12 +10,14 @@ declare(strict_types=1);
 
 namespace Elabftw\Services;
 
-use LdapRecord\Models\ModelNotFoundException;
+use LdapRecord\LdapRecordException;
 use LdapRecord\Testing\ConnectionFake;
 use LdapRecord\Testing\LdapFake;
 
 class LdapAuthTest extends \PHPUnit\Framework\TestCase
 {
+    private LdapAuth $AuthService;
+
     protected function setUp(): void
     {
         $configArr = array(
@@ -37,9 +39,9 @@ class LdapAuthTest extends \PHPUnit\Framework\TestCase
         $this->AuthService = new LdapAuth($connection, $configArr, 'phpunit@example.com', 'phpunitftw');
     }
 
-    public function testTryAuth()
+    public function testTryAuth(): void
     {
-        $this->expectException(ModelNotFoundException::class);
+        $this->expectException(LdapRecordException::class);
         $authResponse = $this->AuthService->tryAuth();
     }
 }

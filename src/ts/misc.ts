@@ -8,21 +8,54 @@
 declare let ChemDoodle: any;
 import 'jquery-ui/ui/widgets/sortable';
 import * as $3Dmol from '3dmol/build/3Dmol-nojquery.js';
-import { ResponseMsg } from './interfaces';
+import { CheckableItem, ResponseMsg } from './interfaces';
+import { DateTime } from 'luxon';
+import { EntityType, Entity } from './interfaces';
 
-const moment = require('moment'); // eslint-disable-line @typescript-eslint/no-var-requires
-
-// DISPLAY COMMENT TIME RELATIVE TO NOW
+// DISPLAY TIME RELATIVE TO NOW
+// the datetime is taken from the title of the element so mouse hover will show raw datetime
 export function relativeMoment(): void {
-  moment.locale($('#user-prefs').data('lang'));
-  $.each($('.relative-moment'), function(i, el) {
-    el.textContent = moment(el.title, 'YYYY-MM-DD H:m:s').fromNow();
-  });
+  const locale = document.getElementById('user-prefs').dataset.jslang;
+  document.querySelectorAll('.relative-moment')
+    .forEach((el) => {
+      const span = el as HTMLElement;
+      span.innerText = DateTime.fromFormat(span.title, 'yyyy-MM-dd HH:mm:ss', {'locale': locale}).toRelative();
+    });
 }
+
+// for view or edit mode, get type and id from the page to construct the entity object
+export function getEntity(): Entity {
+  // holds info about the page through data attributes
+  const about = document.getElementById('info').dataset;
+  let entityType: EntityType;
+  if (about.type === 'experiments') {
+    entityType = EntityType.Experiment;
+  }
+  if (about.type === 'items') {
+    entityType = EntityType.Item;
+  }
+  if (about.type === 'experiments_templates') {
+    entityType = EntityType.Template;
+  }
+  if (about.type === 'items_types') {
+    entityType = EntityType.ItemType;
+  }
+  return {
+    type: entityType,
+    id: parseInt(about.id),
+  };
+}
+
 
 // PUT A NOTIFICATION IN TOP LEFT WINDOW CORNER
 export function notif(info: ResponseMsg): void {
-  const htmlText = '<p>' + info.msg + '</p>';
+  // clear an existing one
+  if (document.getElementById('overlay')) {
+    document.getElementById('overlay').remove();
+  }
+
+  const p = document.createElement('p');
+  p.innerText = (info.msg as string);
   const result = info.res ? 'ok' : 'ko';
   const overlay = document.createElement('div');
   overlay.setAttribute('id','overlay');
@@ -30,7 +63,7 @@ export function notif(info: ResponseMsg): void {
   // show the overlay
   document.body.appendChild(overlay);
   // add text inside
-  document.getElementById('overlay').innerHTML = htmlText;
+  document.getElementById('overlay').appendChild(p);
   // wait a bit and make it disappear
   window.setTimeout(function() {
     $('#overlay').fadeOut(763, function() {
@@ -82,7 +115,7 @@ export function display3DMolecules(autoload = false): void {
 }
 
 // insert a get param in the url and reload the page
-export function insertParamAndReload(key: any, value: any): void {
+export function insertParamAndReload(key: string, value: any): void {
   const params = new URLSearchParams(document.location.search.slice(1));
   params.set(key, value);
   // reload the page
@@ -111,4 +144,31 @@ export function makeSortableGreatAgain(): void {
       });
     }
   });
+}
+
+export function getCheckedBoxes(): Array<CheckableItem> {
+  const checkedBoxes = [];
+  $('.item input[type=checkbox]:checked').each(function() {
+    checkedBoxes.push({
+      id: parseInt($(this).data('id')),
+      // the randomid is used to get the parent container and hide it when delete
+      randomid: parseInt($(this).data('randomid')),
+    });
+  });
+  return checkedBoxes;
+}
+
+export function reloadTagsAndLocks(elementId): Promise<void | Response> {
+  if (document.getElementById(elementId)) {
+    return fetch(window.location.href).then(response => {
+      return response.text();
+    }).then(data => {
+      const parser = new DOMParser();
+      const html = parser.parseFromString(data, 'text/html');
+      document.getElementById(elementId).innerHTML = html.getElementById(elementId).innerHTML;
+      if (document.getElementById('pinned-entities')) {
+        document.getElementById('pinned-entities').innerHTML = html.getElementById('pinned-entities').innerHTML;
+      }
+    });
+  }
 }

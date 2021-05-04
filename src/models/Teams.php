@@ -12,13 +12,15 @@ namespace Elabftw\Models;
 
 use function array_diff;
 use Elabftw\Elabftw\Db;
-use Elabftw\Elabftw\ParamsProcessor;
+use Elabftw\Elabftw\ItemTypeParams;
 use Elabftw\Exceptions\ImproperActionException;
+use Elabftw\Interfaces\ContentParamsInterface;
 use Elabftw\Interfaces\DestroyableInterface;
 use Elabftw\Interfaces\ReadableInterface;
 use Elabftw\Services\Filter;
 use Elabftw\Services\TeamsHelper;
 use Elabftw\Services\UsersHelper;
+use Elabftw\Traits\SetIdTrait;
 use PDO;
 
 /**
@@ -26,21 +28,17 @@ use PDO;
  */
 class Teams implements ReadableInterface, DestroyableInterface
 {
-    /** @var Users $Users instance of Users */
-    public $Users;
+    use SetIdTrait;
 
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    public Users $Users;
 
-    /**
-     * Constructor
-     *
-     * @param Users $users
-     */
-    public function __construct(Users $users)
+    protected Db $Db;
+
+    public function __construct(Users $users, ?int $id = null)
     {
         $this->Db = Db::getConnection();
         $this->Users = $users;
+        $this->id = $id;
     }
 
     /**
@@ -72,8 +70,6 @@ class Teams implements ReadableInterface, DestroyableInterface
      *
      * @param int $userid
      * @param array<array-key, int> $teamIdArr this is the validated array of teams that exist
-     *
-     * @return void
      */
     public function addUserToTeams(int $userid, array $teamIdArr): void
     {
@@ -96,8 +92,6 @@ class Teams implements ReadableInterface, DestroyableInterface
      *
      * @param int $userid
      * @param array<array-key, int> $teamIdArr this is the validated array of teams that exist
-     *
-     * @return void
      */
     public function rmUserFromTeams(int $userid, array $teamIdArr): void
     {
@@ -121,8 +115,6 @@ class Teams implements ReadableInterface, DestroyableInterface
      *
      * @param int $userid
      * @param array<array-key, mixed> $teams
-     *
-     * @return void
      */
     public function synchronize(int $userid, array $teams): void
     {
@@ -151,9 +143,10 @@ class Teams implements ReadableInterface, DestroyableInterface
         $name = Filter::sanitize($name);
 
         // add to the teams table
-        $sql = 'INSERT INTO teams (name, link_name, link_href) VALUES (:name, :link_name, :link_href)';
+        $sql = 'INSERT INTO teams (name, common_template, link_name, link_href) VALUES (:name, :common_template, :link_name, :link_href)';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':name', $name);
+        $req->bindValue(':common_template', Templates::defaultBody);
         $req->bindValue(':link_name', 'Documentation');
         $req->bindValue(':link_href', 'https://doc.elabftw.net');
         $this->Db->execute($req);
@@ -161,36 +154,27 @@ class Teams implements ReadableInterface, DestroyableInterface
         $newId = $this->Db->lastInsertId();
 
         // create default status
-        $Status = new Status($this->Users);
-        $Status->createDefault($newId);
+        $Status = new Status($newId);
+        $Status->createDefault();
 
         // create default item type
-        $ItemsTypes = new ItemsTypes($this->Users);
-        $ItemsTypes->create(
-            new ParamsProcessor(
-                array(
-                    'name' => 'Edit me',
-                    'color' => '#32a100',
-                    'bookable' => 0,
-                    'template' => '<p>Go to the admin panel to edit/add more items types!</p>',
-                )
-            ),
-            $newId
+        $ItemsTypes = new ItemsTypes($newId);
+        $extra = array(
+            'color' => '#32a100',
+            'body' => '<p>Go to the admin panel to edit/add more items types!</p>',
+            'canread' => 'team',
+            'canwrite' => 'team',
+            'bookable' => '0',
         );
-
-        // create default experiment template
-        $Templates = new Templates($this->Users);
-        $Templates->createDefault($newId);
+        $ItemsTypes->create(new ItemTypeParams('Edit me', 'all', $extra));
 
         return $newId;
     }
 
     /**
      * Read from the current team
-     *
-     * @return array
      */
-    public function read(): array
+    public function read(ContentParamsInterface $params): array
     {
         $sql = 'SELECT * FROM `teams` WHERE id = :id';
         $req = $this->Db->prepare($sql);
@@ -207,8 +191,6 @@ class Teams implements ReadableInterface, DestroyableInterface
 
     /**
      * Get all the teams
-     *
-     * @return array
      */
     public function readAll(): array
     {
@@ -226,10 +208,10 @@ class Teams implements ReadableInterface, DestroyableInterface
     /**
      * Delete a team only if all the stats are at zero
      */
-    public function destroy(int $id): bool
+    public function destroy(): bool
     {
         // check for stats, should be 0
-        $count = $this->getStats($id);
+        $count = $this->getStats($this->id);
 
         if ($count['totxp'] !== '0' || $count['totdb'] !== '0' || $count['totusers'] !== '0') {
             throw new ImproperActionException('The team is not empty! Aborting deletion!');
@@ -238,14 +220,12 @@ class Teams implements ReadableInterface, DestroyableInterface
         // foreign keys will take care of deleting associated data (like status or experiments_templates)
         $sql = 'DELETE FROM teams WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         return $this->Db->execute($req);
     }
 
     /**
      * Clear the timestamp password
-     *
-     * @return bool
      */
     public function destroyStamppass(): bool
     {
@@ -258,8 +238,6 @@ class Teams implements ReadableInterface, DestroyableInterface
 
     /**
      * Get statistics for the whole install
-     *
-     * @return array
      */
     public function getAllStats(): array
     {
@@ -282,9 +260,6 @@ class Teams implements ReadableInterface, DestroyableInterface
 
     /**
      * Get statistics for a team
-     *
-     * @param int $team
-     * @return array
      */
     public function getStats(int $team): array
     {
@@ -314,7 +289,7 @@ class Teams implements ReadableInterface, DestroyableInterface
 
     private function createTeamIfAllowed(string $name): int
     {
-        $Config = new Config();
+        $Config = Config::getConfig();
         if ($Config->configArr['saml_team_create']) {
             return $this->create($name);
         }

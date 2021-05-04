@@ -5,47 +5,41 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import Crud from './Crud.class';
-import { notif } from './misc';
+import { Payload, Method, Entity, Action, EntityType, ResponseMsg } from './interfaces';
+import { Ajax } from './Ajax.class';
 import { getTinymceBaseConfig } from './tinymce';
 import tinymce from 'tinymce/tinymce';
 
-export default class ItemType extends Crud {
-  what: string;
+
+export default class ItemType {
+  entity: Entity;
+  model: EntityType;
+  sender: Ajax;
 
   constructor() {
-    super('app/controllers/Ajax.php');
-    this.what = 'itemsTypes';
+    this.model = EntityType.ItemType,
+    this.sender = new Ajax();
   }
 
-  create(): void {
-    const name = $('#itemsTypesName').val();
-    if (name === '') {
-      notif({'res': false, 'msg': 'Name cannot be empty'});
-      $('#itemsTypesName').css('border-color', 'red');
-      return;
-    }
-    const color = $('#itemsTypesColor').val();
-    const checkbox = $('#itemsTypesBookable').is(':checked');
-    let bookable = 0;
-    if (checkbox) {
-      bookable = 1;
-    }
-
-    const template = tinymce.get('itemsTypesTemplate').getContent();
-
-    this.send({
-      action: 'create',
-      what: this.what,
-      params: {
-        template: template,
-        name: name,
+  create(content: string, color: string, bookable: number, body: string, canread: string, canwrite: string): Promise<ResponseMsg> {
+    const payload: Payload = {
+      method: Method.POST,
+      action: Action.Create,
+      model: this.model,
+      entity: {
+        type: EntityType.ItemType,
+        id: null,
+      },
+      content: content,
+      extraParams: {
         color: color,
         bookable: bookable,
+        body: body,
+        canread: canread,
+        canwrite: canwrite,
       },
-    }).then(function() {
-      window.location.replace('admin.php?tab=5');
-    });
+    };
+    return this.sender.send(payload);
   }
 
   showEditor(id): void {
@@ -54,47 +48,37 @@ export default class ItemType extends Crud {
     $('#itemsTypesEditor_' + id).toggle();
   }
 
-  update(id): void {
-    const name = $('#itemsTypesName_' + id).val();
-    const color = $('#itemsTypesColor_' + id).val();
-    const checkbox = $('#itemsTypesBookable_' + id).is(':checked');
-    let bookable = 0;
-    if (checkbox) {
-      bookable = 1;
-    }
-    // if tinymce is hidden, it'll fail to trigger
-    // so we toggle it quickly to grab the content
-    if ($('#itemsTypesTemplate_' + id).is(':hidden')) {
-      this.showEditor(id);
-    }
-    const template = tinymce.get('itemsTypesTemplate_' + id).getContent();
-    $('#itemsTypesEditor_' + id).toggle();
-
-    this.send({
-      action: 'update',
-      what: this.what,
-      params: {
+  update(id: number, content: string, color: string, bookable: number, body: string, canread: string, canwrite: string): Promise<ResponseMsg> {
+    const payload: Payload = {
+      method: Method.POST,
+      action: Action.Update,
+      model: this.model,
+      entity: {
+        type: EntityType.ItemType,
         id: id,
-        template: template,
-        name: name,
+      },
+      content: content,
+      extraParams: {
         color: color,
         bookable: bookable,
+        body: body,
+        canread: canread,
+        canwrite: canwrite,
       },
-    });
+    };
+    return this.sender.send(payload);
   }
 
-  destroy(id): void {
-    this.send({
-      action: 'destroy',
-      what: this.what,
-      params: {
+  destroy(id: number): Promise<ResponseMsg> {
+    const payload: Payload = {
+      method: Method.POST,
+      action: Action.Destroy,
+      model: this.model,
+      entity: {
+        type: EntityType.ItemType,
         id: id,
       },
-    }).then(function(response) {
-      if (response.res) {
-        $('#itemstypes_' + id).hide();
-        $('#itemstypesOrder_' + id).hide();
-      }
-    });
+    };
+    return this.sender.send(payload);
   }
 }

@@ -10,81 +10,79 @@ declare(strict_types=1);
 
 namespace Elabftw\Models;
 
+use function bin2hex;
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\DisplayParams;
 use Elabftw\Elabftw\Permissions;
 use Elabftw\Elabftw\Tools;
-use Elabftw\Exceptions\DatabaseErrorException;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\ResourceNotFoundException;
-use Elabftw\Interfaces\CreatableInterface;
+use Elabftw\Interfaces\ContentParamsInterface;
+use Elabftw\Interfaces\CrudInterface;
+use Elabftw\Interfaces\EntityParamsInterface;
+use Elabftw\Interfaces\ItemTypeParamsInterface;
 use Elabftw\Maps\Team;
 use Elabftw\Services\Check;
 use Elabftw\Services\Email;
 use Elabftw\Services\Filter;
+use Elabftw\Services\Transform;
 use Elabftw\Traits\EntityTrait;
 use function explode;
 use function is_bool;
 use PDO;
+use function random_bytes;
+use function sha1;
 
 /**
- * The mother class of Experiments and Database
+ * The mother class of Experiments, Items, Templates and ItemsTypes
  */
-abstract class AbstractEntity implements CreatableInterface
+abstract class AbstractEntity implements CrudInterface
 {
     use EntityTrait;
 
-    /** @var Comments $Comments instance of Comments */
-    public $Comments;
+    public Comments $Comments;
 
-    /** @var Links $Links instance of Links */
-    public $Links;
+    public Links $Links;
 
-    /** @var Steps $Steps instance of Steps */
-    public $Steps;
+    public Steps $Steps;
 
-    /** @var Tags $Tags instance of Tags */
-    public $Tags;
+    public Tags $Tags;
 
-    /** @var Uploads $Uploads instance of Uploads */
-    public $Uploads;
+    public Uploads $Uploads;
 
-    /** @var Users $Users our user */
-    public $Users;
+    public Users $Users;
 
-    /** @var Pins $Pins */
-    public $Pins;
+    public Pins $Pins;
 
-    /** @var string $type experiments or items */
-    public $type = '';
+    // experiments or items
+    public string $type = '';
 
-    /** @var bool $bypassPermissions use that to ignore the canOrExplode calls */
-    public $bypassPermissions = false;
+    // use that to ignore the canOrExplode calls
+    public bool $bypassPermissions = false;
 
-    /** @var string $page will be defined in children classes */
-    public $page = '';
+    // will be defined in children classes
+    public string $page = '';
 
-    /** @var array $filters an array of arrays with filters for sql query */
-    public $filters = array();
+    // an array of arrays with filters for sql query
+    public array $filters = array();
 
-    /** @var string $idFilter sql of ids to include */
-    public $idFilter;
+    // sql of ids to include
+    public string $idFilter = '';
 
-    /** @var string $titleFilter inserted in sql */
-    public $titleFilter = '';
+    // inserted in sql
+    public string $titleFilter = '';
 
-    /** @var string $dateFilter inserted in sql */
-    public $dateFilter = '';
+    // inserted in sql
+    public string $dateFilter = '';
 
-    /** @var string $bodyFilter inserted in sql */
-    public $bodyFilter = '';
+    // inserted in sql
+    public string $bodyFilter = '';
 
-    /** @var bool $isReadOnly if we can read but not write to it */
-    public $isReadOnly = false;
+    public bool $isReadOnly = false;
 
-    /** @var TeamGroups $TeamGroups instance of TeamGroups */
-    protected $TeamGroups;
+    protected TeamGroups $TeamGroups;
 
     /**
      * Constructor
@@ -101,10 +99,9 @@ abstract class AbstractEntity implements CreatableInterface
         $this->Tags = new Tags($this);
         $this->Uploads = new Uploads($this);
         $this->Users = $users;
-        $this->Comments = new Comments($this, new Email(new Config(), $this->Users));
+        $this->Comments = new Comments($this, new Email(Config::getConfig(), $this->Users));
         $this->TeamGroups = new TeamGroups($this->Users);
         $this->Pins = new Pins($this);
-        $this->idFilter = '';
 
         if ($id !== null) {
             $this->setId($id);
@@ -119,24 +116,10 @@ abstract class AbstractEntity implements CreatableInterface
     abstract public function duplicate(): int;
 
     /**
-     * Destroy an item
-     *
-     * @return void
-     */
-    //abstract public function destroy(?int $id = null): void;
-
-    /**
      * Lock/unlock
-     *
-     * @return void
      */
-    public function toggleLock(): void
+    public function toggleLock(): bool
     {
-        // no locking for templates
-        if ($this instanceof Templates) {
-            return;
-        }
-
         $permissions = $this->getPermissions();
         if (!$this->Users->userData['can_lock'] && !$permissions['write']) {
             throw new ImproperActionException(_("You don't have the rights to lock/unlock this."));
@@ -168,7 +151,7 @@ abstract class AbstractEntity implements CreatableInterface
         $req = $this->Db->prepare($sql);
         $req->bindParam(':lockedby', $this->Users->userData['userid'], PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
@@ -209,21 +192,27 @@ abstract class AbstractEntity implements CreatableInterface
         if ($displayParams->searchType === 'related') {
             $sql .= ' AND linkst.link_id = ' . $displayParams->related;
         }
+
         // teamFilter is to restrict to the team for items only
         // as they have a team column
         $teamFilter = '';
-        if ($this instanceof Database) {
+        if ($this instanceof Items) {
             $teamFilter = ' AND users2teams.teams_id = entity.team';
         }
         // add pub/org/team filter
-        $sql .= " AND ( entity.canread = 'public' OR entity.canread = 'organization' OR (entity.canread = 'team' AND users2teams.users_id = entity.userid" . $teamFilter . ") OR (entity.canread = 'user' ";
+        $sqlPublicOrg = "(entity.canread = 'public' OR entity.canread = 'organization') OR ";
+        if ($this->Users->userData['show_public']) {
+            $sqlPublicOrg = "entity.canread = 'public' OR entity.canread = 'organization' OR ";
+        }
+        $sql .= ' AND ( ' . $sqlPublicOrg . " (entity.canread = 'team' AND users2teams.users_id = entity.userid" . $teamFilter . ") OR (entity.canread = 'user' ";
         // admin will see the experiments with visibility user for user of their team
         if ($this->Users->userData['is_admin']) {
             $sql .= 'AND entity.userid = users2teams.users_id)';
         } else {
-            // normal user will so only their own experiments
             $sql .= 'AND entity.userid = :userid)';
         }
+        // add entities in useronly visibility only if we own them
+        $sql .= " OR (entity.canread = 'useronly' AND entity.userid = :userid)";
         // add all the teamgroups in which the user is
         if (!empty($teamgroupsOfUser)) {
             foreach ($teamgroupsOfUser as $teamgroup) {
@@ -236,7 +225,7 @@ abstract class AbstractEntity implements CreatableInterface
             $this->titleFilter,
             $this->dateFilter,
             $this->bodyFilter,
-            Tools::getSearchSql($displayParams->query, 'and', '', $this->type),
+            Tools::getSearchSql($displayParams->query),
             $this->idFilter,
             'GROUP BY id ORDER BY',
             $displayParams->getOrderSql(),
@@ -262,14 +251,24 @@ abstract class AbstractEntity implements CreatableInterface
         return $itemsArr;
     }
 
+    public function read(ContentParamsInterface $params): array
+    {
+        if ($params->getTarget() === 'boundevent' && $this instanceof Experiments) {
+            return $this->getBoundEvents();
+        }
+        if ($params->getTarget() === 'metadata') {
+            return array('metadata' => $this->readAll()['metadata']);
+        }
+        return $this->readAll();
+    }
+
     /**
      * Read all from one entity
      * Here be dragons!
      *
      * @param bool $getTags if true, might take a long time
-     * @return array
      */
-    public function read(bool $getTags = true): array
+    public function readAll(bool $getTags = true): array
     {
         if ($this->id === null) {
             throw new IllegalActionException('No id was set!');
@@ -292,6 +291,18 @@ abstract class AbstractEntity implements CreatableInterface
         }
 
         return $item;
+    }
+
+    public function getTeamFromElabid(string $elabid): int
+    {
+        $elabid = Filter::sanitize($elabid);
+        $sql = 'SELECT users2teams.teams_id FROM ' . $this->type . ' AS entity
+            CROSS JOIN users2teams ON (users2teams.users_id = entity.userid)
+            WHERE entity.elabid = :elabid';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':elabid', $elabid, PDO::PARAM_STR);
+        $this->Db->execute($req);
+        return (int) $req->fetchColumn();
     }
 
     /**
@@ -327,78 +338,52 @@ abstract class AbstractEntity implements CreatableInterface
 
     /**
      * Update an entity. The revision is saved before so it can easily compare old and new body.
-     *
-     * @param string $title
-     * @param string $date
-     * @param string $body
-     * @throws ImproperActionException
-     * @throws DatabaseErrorException
-     * @return void
      */
-    public function update(string $title, string $date, string $body): void
+    //public function update(string $title, string $date, string $body): void
+    public function update(EntityParamsInterface | ItemTypeParamsInterface $params): bool
     {
         $this->canOrExplode('write');
 
-        // don't update if locked
-        if ($this->entityData['locked']) {
-            throw new ImproperActionException(_('Cannot update a locked entity!'));
+        switch ($params->getTarget()) {
+            case 'title':
+                $content = $params->getTitle();
+                break;
+            case 'date':
+                $content = $params->getDate();
+                break;
+            case 'body':
+                $content = $params->getBody();
+                break;
+            case 'rating':
+                $content = $params->getRating();
+                break;
+            case 'metadata':
+                if (!empty($params->getField())) {
+                    return $this->updateJsonField($params);
+                }
+                $content = $params->getMetadata();
+                break;
+            default:
+                throw new ImproperActionException('Invalid update target');
         }
 
-        // add a revision
-        $Revisions = new Revisions($this);
-        $Revisions->create($body);
-
-        $title = Filter::title($title);
-        $date = Filter::kdate($date);
-        $body = Filter::body($body);
-
-        $sql = 'UPDATE ' . $this->type . ' SET
-            title = :title,
-            date = :date,
-            body = :body
-            WHERE id = :id';
-
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':title', $title);
-        $req->bindParam(':date', $date);
-        $req->bindParam(':body', $body);
-        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-
-        $this->Db->execute($req);
-    }
-
-    public function updateTitle(string $title): void
-    {
-        $this->canOrExplode('write');
-        // don't update if locked
-        if ($this->entityData['locked']) {
-            throw new ImproperActionException(_('Cannot update a locked entity!'));
+        // save a revision for body target
+        if ($params->getTarget() === 'body') {
+            $Config = Config::getConfig();
+            $Revisions = new Revisions(
+                $this,
+                (int) $Config->configArr['max_revisions'],
+                (int) $Config->configArr['min_delta_revisions'],
+            );
+            $Revisions->create((string) $content);
         }
 
-        $title = Filter::title($title);
-        $sql = 'UPDATE ' . $this->type . ' SET title = :title WHERE id = :id';
+        $sql = 'UPDATE ' . $this->type . ' SET ' . $params->getTarget() . ' = :content WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':title', $title);
+        $req->bindValue(':content', $content);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
 
-        $this->Db->execute($req);
-    }
-
-    public function updateDate(string $date): void
-    {
-        $this->canOrExplode('write');
-        // don't update if locked
-        if ($this->entityData['locked']) {
-            throw new ImproperActionException(_('Cannot update a locked entity!'));
-        }
-
-        $date = Filter::kdate($date);
-        $sql = 'UPDATE ' . $this->type . ' SET date = :date WHERE id = :id';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':date', $date);
-        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
@@ -416,12 +401,12 @@ abstract class AbstractEntity implements CreatableInterface
         // check if the permissions are enforced
         $Team = new Team((int) $this->Users->userData['team']);
         if ($rw === 'read') {
-            if ($Team->getDoForceCanread() === 1) {
+            if ($Team->getDoForceCanread() === 1 && !$this->Users->userData['is_admin']) {
                 throw new ImproperActionException(_('Read permissions enforced by admin. Aborting change.'));
             }
             $column = 'canread';
         } else {
-            if ($Team->getDoForceCanwrite() === 1) {
+            if ($Team->getDoForceCanwrite() === 1 && !$this->Users->userData['is_admin']) {
                 throw new ImproperActionException(_('Read permissions enforced by admin. Aborting change.'));
             }
             $column = 'canwrite';
@@ -438,31 +423,16 @@ abstract class AbstractEntity implements CreatableInterface
     /**
      * Get a list of visibility/team groups to display
      *
-     * @param string $rw read or write
+     * @param string $permission raw value (public, organization, team, user, useronly)
      * @return string capitalized and translated permission level
      */
-    public function getCan(string $rw): string
+    public function getCan(string $permission): string
     {
-        if (Check::id((int) $this->entityData['can' . $rw]) !== false) {
-            return ucfirst($this->TeamGroups->readName((int) $this->entityData['can' . $rw]));
+        // if it's a number, then lookup the name of the team group
+        if (Check::id((int) $permission) !== false) {
+            return ucfirst($this->TeamGroups->readName((int) $permission));
         }
-        switch ($this->entityData['can' . $rw]) {
-            case 'public':
-                $res = _('Public');
-                break;
-            case 'organization':
-                $res = _('Organization');
-                break;
-            case 'team':
-                $res = _('Team');
-                break;
-            case 'user':
-                $res = _('User');
-                break;
-            default:
-                $res = Tools::error();
-        }
-        return ucfirst($res);
+        return Transform::permission($permission);
     }
 
     /**
@@ -511,15 +481,22 @@ abstract class AbstractEntity implements CreatableInterface
 
         $Permissions = new Permissions($this->Users, $item);
 
-        if ($this instanceof Experiments || $this instanceof Database) {
-            return $Permissions->forExpItem();
-        }
-
-        if ($this instanceof Templates) {
-            return $Permissions->forTemplates();
+        if ($this instanceof Experiments || $this instanceof Items || $this instanceof Templates) {
+            return $Permissions->forEntity();
         }
 
         return array('read' => false, 'write' => false);
+    }
+
+    public function updateRating(int $rating): void
+    {
+        $this->canOrExplode('write');
+
+        $sql = 'UPDATE ' . $this->type . ' SET rating = :rating WHERE id = :id';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':rating', $rating, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        $this->Db->execute($req);
     }
 
     /**
@@ -569,7 +546,7 @@ abstract class AbstractEntity implements CreatableInterface
         if ($period === '') {
             $period = '15000101-30000101';
         }
-        list($from, $to) = explode('-', $period);
+        [$from, $to] = explode('-', $period);
         $sql = 'SELECT id FROM ' . $this->type . ' WHERE userid = :userid AND lastchange BETWEEN :from AND :to';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':userid', $userid, PDO::PARAM_INT);
@@ -590,8 +567,6 @@ abstract class AbstractEntity implements CreatableInterface
 
     /**
      * Now that we have an id, load the data in entityData array
-     *
-     * @return void
      */
     public function populate(): void
     {
@@ -600,7 +575,7 @@ abstract class AbstractEntity implements CreatableInterface
         }
 
         // load the entity in entityData array
-        $this->entityData = $this->read();
+        $this->entityData = $this->read(new ContentParams());
     }
 
     /**
@@ -610,7 +585,7 @@ abstract class AbstractEntity implements CreatableInterface
      */
     public function getTimestampInfo(): array
     {
-        if ($this instanceof Database || $this->entityData['timestamped'] === '0') {
+        if ($this instanceof Items || $this->entityData['timestamped'] === '0') {
             return array();
         }
         $timestamper = $this->Users->read((int) $this->entityData['timestampedby']);
@@ -622,10 +597,14 @@ abstract class AbstractEntity implements CreatableInterface
         $Uploads->Entity->type = 'timestamp-token';
         $token = $Uploads->readAll();
 
+        $Uploads->Entity->type = 'bloxberg-proof';
+        $bloxbergProof = $Uploads->readAll();
+
         return array(
             'timestamper' => $timestamper,
             'pdf' => $pdf,
             'token' => $token,
+            'bloxbergProof' => $bloxbergProof,
         );
     }
 
@@ -644,6 +623,38 @@ abstract class AbstractEntity implements CreatableInterface
 
         $this->Db->execute($req);
         return $req->rowCount() > 0;
+    }
+
+    public function getTable(): string
+    {
+        return $this->type;
+    }
+
+    /**
+     * Update only one field in the metadata json
+     */
+    protected function updateJsonField(EntityParamsInterface $params): bool
+    {
+        // build field (input is double quoted to allow for whitespace in key)
+        $field = '$.extra_fields."' . $params->getField() . '".value';
+        $sql = 'UPDATE ' . $this->getTable() . ' SET metadata = JSON_SET(metadata, :field, :value) WHERE id = :id';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':field', $field);
+        $req->bindValue(':value', $params->getContent());
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        return $this->Db->execute($req);
+    }
+
+    /**
+     * Generate unique elabID
+     * This function is called during the creation of an experiment.
+     *
+     * @return string unique elabid with date in front of it
+     */
+    protected function generateElabid(): string
+    {
+        $date = Filter::kdate();
+        return $date . '-' . sha1(bin2hex(random_bytes(16)));
     }
 
     /**
@@ -668,6 +679,7 @@ abstract class AbstractEntity implements CreatableInterface
                 entity.title,
                 entity.date,
                 entity.category,
+                entity.rating,
                 entity.userid,
                 entity.locked,
                 entity.canread,
@@ -732,7 +744,7 @@ abstract class AbstractEntity implements CreatableInterface
         if ($this instanceof Experiments) {
             $select .= ', entity.timestamped';
             $eventsColumn = 'experiment';
-        } elseif ($this instanceof Database) {
+        } elseif ($this instanceof Items) {
             $select .= ', categoryt.bookable';
             $eventsColumn = 'item';
         } else {

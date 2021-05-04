@@ -28,6 +28,11 @@
   </div>
 </div>
 
+<!-- LOGIN ANNOUNCEMENT -->
+{% if App.Config.configArr.login_announcement %}
+  {{ App.Config.configArr.login_announcement|msg('warning') }}
+{% endif %}
+
 <section class='text-center'>
     <img src='app/img/logo.png' alt='elabftw' title='elabftw' class='col-md-3' />
   {% if App.Session.has('team_selection_required') %}
@@ -70,7 +75,7 @@
           <input class='form-control mb-4' id='email' name='email' type='email' value='{{ App.Session.has('email') ? App.Session.get('email') }}' required />
           <label for='password'>{{ 'Password'|trans }}</label>
           <!-- add tabindex=-1 to the forget password so we can switch from login to password with tab -->
-          <a href='#' class='align_right underlined resetPassword modalToggle' tabindex='-1' data-modal='resetModal'>{{ 'Forgot password?'|trans }}</a>
+          <a class='align-right clickable underlined resetPassword modalToggle' tabindex='-1' data-modal='resetModal'>{{ 'Forgot password?'|trans }}</a>
           <div class='input-group'>
             <input class='form-control' id='password' name='password' type='password' required />
             <div class='input-group-append'>
@@ -154,4 +159,6 @@
     {% endif %}
   {% endif %}
 </section>
+
+<div id='info' data-page='login'></div>
 {% endblock body %}

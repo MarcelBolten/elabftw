@@ -9,60 +9,56 @@
 
 namespace Elabftw\Models;
 
-use Elabftw\Elabftw\ParamsProcessor;
+use Elabftw\Elabftw\ContentParams;
+use Elabftw\Elabftw\EntityParams;
 
 class TemplatesTest extends \PHPUnit\Framework\TestCase
 {
+    private Templates $Templates;
+
     protected function setUp(): void
     {
         $this->Templates= new Templates(new Users(1, 1));
     }
 
-    public function testCreate()
+    public function testCreate(): void
     {
-        $this->Templates->create(new ParamsProcessor(array('name' => 'Test tpl', 'template' => 'pwet')));
+        $this->Templates->create(new EntityParams('Test tpl', '', array('body' => 'pwet')));
     }
 
-    public function testRead()
+    public function testRead(): void
     {
         $this->Templates->setId(1);
-        $this->assertTrue(is_array($this->Templates->read()));
+        $this->assertTrue(is_array($this->Templates->read(new ContentParams())));
     }
 
-    public function testGetWriteableTemplatesList()
+    public function testGetWriteableTemplatesList(): void
     {
         $this->assertTrue(is_array($this->Templates->getWriteableTemplatesList()));
     }
 
-    public function testDuplicate()
+    public function testDuplicate(): void
     {
         $this->Templates->setId(1);
         $this->assertIsInt($this->Templates->duplicate());
     }
 
-    public function testReadForUser()
+    public function testReadForUser(): void
     {
         $this->assertTrue(is_array($this->Templates->readForUser()));
     }
 
-    public function testReadCommonBody()
+    public function testUpdate(): void
     {
-        $this->Templates->Users->userData['use_markdown'] = 1;
-        $this->assertEquals('', $this->Templates->readCommonBody());
+        $this->Templates->setId(1);
+        $this->Templates->update(new EntityParams('Database item 1', 'title'));
+        $this->Templates->update(new EntityParams('20160729', 'date'));
+        $this->Templates->update(new EntityParams('pwet', 'body'));
     }
 
-    public function testUpdateCommon()
+    public function testDestroy(): void
     {
-        $this->Templates->updateCommon('Plop');
-    }
-
-    public function testUpdateTpl()
-    {
-        $this->Templates->updateTpl(1, 'my tpl', 'Plop');
-    }
-
-    public function testDestroy()
-    {
-        $this->Templates->destroy(1);
+        $this->Templates->setId(1);
+        $this->Templates->destroy();
     }
 }

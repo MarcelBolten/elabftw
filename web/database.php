@@ -15,7 +15,7 @@ use Elabftw\Exceptions\DatabaseErrorException;
 use Elabftw\Exceptions\FilesystemErrorException;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Models\Database;
+use Elabftw\Models\Items;
 use Exception;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -31,7 +31,7 @@ $Response = new Response();
 $Response->prepare($Request);
 
 try {
-    $Controller = new DatabaseController($App, new Database($App->Users));
+    $Controller = new DatabaseController($App, new Items($App->Users));
     // show nothing to anon if admin didn't set the DB as public
     if ($App->Session->has('is_anon') && ($App->teamConfigArr['public_db'] === '0')) {
         throw new ImproperActionException(Tools::error(true));
@@ -62,5 +62,13 @@ try {
     $renderArr = array('error' => Tools::error());
     $Response->setContent($App->render($template, $renderArr));
 } finally {
+    // autologout if there is elabid in view mode
+    // so we don't stay logged in as anon
+    if ($App->Request->query->has('elabid')
+        && $App->Request->query->get('mode') === 'view'
+        && !$App->Request->getSession()->has('is_auth')) {
+        $App->Session->invalidate();
+    }
+
     $Response->send();
 }

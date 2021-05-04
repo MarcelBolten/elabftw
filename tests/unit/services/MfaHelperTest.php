@@ -18,32 +18,31 @@ class MfaHelperTest extends \PHPUnit\Framework\TestCase
     /** @var string $secret The 2FA test secret */
     private const SECRET = 'EXAMPLE2FASECRET234567ABCDEFGHIJ';
 
-    /** @var MfaHelper $MfaHelper */
-    private $MfaHelper;
+    private MfaHelper $MfaHelper;
 
     protected function setUp(): void
     {
         $this->MfaHelper = new MfaHelper(1, self::SECRET);
     }
 
-    public function testGenerateSecret()
+    public function testGenerateSecret(): void
     {
         $secret = $this->MfaHelper->generateSecret();
         $this->assertEquals(strlen($secret), 32);
         $this->MfaHelper->secret = $secret;
     }
 
-    public function testSaveSecret()
+    public function testSaveSecret(): void
     {
         $this->MfaHelper->saveSecret();
     }
 
-    public function testRemoveSecret()
+    public function testRemoveSecret(): void
     {
         $this->MfaHelper->removeSecret();
     }
 
-    public function testVerifyCode()
+    public function testVerifyCode(): void
     {
         $code = $this->MfaHelper->getCode();
         $this->assertTrue($this->MfaHelper->verifyCode($code));
