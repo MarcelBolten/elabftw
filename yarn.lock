@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"3dmol@^1.4.0":
-  version "1.6.3"
-  resolved "https://registry.yarnpkg.com/3dmol/-/3dmol-1.6.3.tgz#f4f7ef7fb34cb7cf17e846421aa398183c0c1a2f"
-  integrity sha512-7Nz+KDo/oOswDLRezmwLpSW1FIGiq08NE5MVaFbWewgHqUr/PFD3pNWlmsMRZLP6TCkHp0TDXpVfq8ycjhdWmQ==
+"3dmol@^1.6.4":
+  version "1.6.4"
+  resolved "https://registry.yarnpkg.com/3dmol/-/3dmol-1.6.4.tgz#b4e7fdfb20215875e1024ef2949145529d53a6a8"
+  integrity sha512-OKgWO5qeu2+FrEpbdsnfJnvBtIWnSUu5f3n6Xd+pHOPeBYIeHh9rcay8V85O7LNQTMokuxc5Pm3RLLqDsVr10A==
   dependencies:
     ini "^2.0.0"
     jquery "^3.6.0"
