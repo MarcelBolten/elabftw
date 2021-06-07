@@ -992,18 +992,18 @@
   dependencies:
     "@fortawesome/fontawesome-common-types" "^0.2.35"
 
-"@fullcalendar/bootstrap@^5.1.0":
-  version "5.7.0"
-  resolved "https://registry.yarnpkg.com/@fullcalendar/bootstrap/-/bootstrap-5.7.0.tgz#c047321a57f6fa7b3d0dbedd413f00b7b05321b2"
-  integrity sha512-JcuXaGGpTYM98MDgugaJpsVEIfz1yXziQ2/Q+MAQu0eWR1M9Py8LTRb6s/zNS8cs7MKYP1l4YGrQjRiJ/u/ikA==
+"@fullcalendar/bootstrap@^5.7.2":
+  version "5.7.2"
+  resolved "https://registry.yarnpkg.com/@fullcalendar/bootstrap/-/bootstrap-5.7.2.tgz#ecb50027883f1aebbf9eb019d18ea61f37ad50f7"
+  integrity sha512-wqezEhQlsgzcOWK+zZMoEy2Liec9zJ80mQbqhEQPQWRMWYnYSTVfPmP4lFLs5/Zhd4R5H4x+m1tydA/zvbI7rQ==
   dependencies:
-    "@fullcalendar/common" "~5.7.0"
+    "@fullcalendar/common" "~5.7.2"
     tslib "^2.0.3"
 
-"@fullcalendar/common@~5.7.0":
-  version "5.7.0"
-  resolved "https://registry.yarnpkg.com/@fullcalendar/common/-/common-5.7.0.tgz#fe83f6dbf631c4170654386e9b522ee85c2c064b"
-  integrity sha512-8zKa4q9cQ5xjuAyN0d8AlpCrEC9Kmar5Oq3iMcPbPIO2AtNXTvifzCG44VIgm3/skjDBZ/wYvjJyyB+4WdmT6g==
+"@fullcalendar/common@~5.7.0", "@fullcalendar/common@~5.7.2":
+  version "5.7.2"
+  resolved "https://registry.yarnpkg.com/@fullcalendar/common/-/common-5.7.2.tgz#a9fae0159a26dd83b0b85df04df3fd66133fa433"
+  integrity sha512-0EDKmZBvTUFLvnJ7n6Vo6xMaPVm0jpYq739aSjwFPPXKgbjKFTPbWvLkaDpjJf7YhVebVSOLHbUC1Ky5wXsKvQ==
   dependencies:
     tslib "^2.0.3"
 
