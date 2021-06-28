@@ -33,7 +33,7 @@
     "bootstrap-markdown-fa5": "2.10.*",
     "bootstrap-select": "^1.13.18",
     "css-loader": "^5.0.1",
-    "css-minimizer-webpack-plugin": "^3.0.0",
+    "css-minimizer-webpack-plugin": "^3.0.2",
     "dropzone": "^5.8.0",
     "expose-loader": "^3.0.0",
     "file-loader": "^6.2.0",
