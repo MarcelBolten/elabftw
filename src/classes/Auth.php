@@ -15,6 +15,7 @@ use Elabftw\Exceptions\UnauthorizedException;
 use Elabftw\Interfaces\AuthInterface;
 use Elabftw\Models\Config;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 use Elabftw\Models\Users;
 use Elabftw\Services\AnonAuth;
 use Elabftw\Services\CookieAuth;
@@ -28,14 +29,11 @@ use Symfony\Component\HttpFoundation\Session\SessionInterface;
  */
 class Auth implements AuthInterface
 {
-    /** @var Config $Config */
-    private $Config;
+    private Config $Config;
 
-    /** @var SessionInterface $Session the current session */
-    private $Session;
+    private SessionInterface $Session;
 
-    /** @var Request $Request current request */
-    private $Request;
+    private Request $Request;
 
     public function __construct(App $app)
     {
@@ -61,8 +59,6 @@ class Auth implements AuthInterface
 
     /**
      * Increase the failed attempts counter
-     *
-     * @return void
      */
     public function increaseFailedAttempt(): void
     {
@@ -92,6 +88,7 @@ class Auth implements AuthInterface
             'metadata.php',
             'register.php',
             'RegisterController.php',
+            'RequestHandler.php',
             'ResetPasswordController.php',
         );
 
@@ -106,9 +103,10 @@ class Auth implements AuthInterface
             return 'session';
         }
 
-        // try to login with the elabid for an experiment in view mode
+        // try to login with the elabid for an entity in view mode
+        $page = basename($this->Request->getScriptName());
         if ($this->Request->query->has('elabid')
-            && basename($this->Request->getScriptName()) === 'experiments.php'
+            && ($page === 'experiments.php' || $page === 'database.php')
             && $this->Request->query->get('mode') === 'view') {
             return 'elabid';
         }
@@ -130,13 +128,24 @@ class Auth implements AuthInterface
         switch ($authType) {
             // AUTH WITH COOKIE
             case 'cookie':
-                return new CookieAuth($this->Request->cookies->get('token'), $this->Request->cookies->get('token_team'));
+                return new CookieAuth((string) $this->Request->cookies->get('token'), $this->Request->cookies->getDigits('token_team'));
             case 'session':
                 return new SessionAuth();
             case 'elabid':
                 // now we need to know in which team we autologin the user
-                $Experiments = new Experiments(new Users(), (int) $this->Request->query->get('id'));
-                $team = $Experiments->getTeamFromElabid($this->Request->query->get('elabid'));
+                // use the page from the request to determine if it's from items or experiments
+                $page = $this->Request->getScriptName();
+                if ($page === '/experiments.php') {
+                    $Entity = new Experiments(new Users(), (int) $this->Request->query->get('id'));
+                } elseif ($page === '/database.php') {
+                    $Entity = new Items(new Users(), (int) $this->Request->query->get('id'));
+                } else {
+                    throw new UnauthorizedException();
+                }
+                $team = $Entity->getTeamFromElabid((string) $this->Request->query->get('elabid'));
+                if ($team === 0) {
+                    throw new UnauthorizedException();
+                }
                 return new AnonAuth($this->Config->configArr, $team);
             case 'open':
                 // don't do it if we have elabid in url

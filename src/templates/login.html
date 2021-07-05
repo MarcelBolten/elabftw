@@ -28,8 +28,13 @@
   </div>
 </div>
 
+<!-- LOGIN ANNOUNCEMENT -->
+{% if App.Config.configArr.login_announcement %}
+  {{ App.Config.configArr.login_announcement|msg('warning') }}
+{% endif %}
+
 <section class='text-center'>
-  <img src='app/img/logo.png' alt='elabftw' title='elabftw' class='col-md-3' />
+  <img src='app/img/logo.png' alt='logo elabftw' title='elabftw' class='col-md-3' />
   <p>Electronic lab notebook system of the <a href='https://mayorlab.msl.ubc.ca' target='_blank' rel='noopener'>Mayor lab</a>.</p>
   {% if App.Session.has('team_selection_required') %}
     <form method='post' action='app/controllers/LoginController.php'>
@@ -64,14 +69,14 @@
       <form method='post' id='login' action='app/controllers/LoginController.php' autocomplete='off'>
         <!-- form key -->
         {{ App.Csrf.getHiddenInput|raw }}
-        <h2 class='mt-4'>{{ 'Login to your account'|trans }}</h2>
+        <h1 class='mt-4'>{{ 'Login to your account'|trans }}</h1>
         <br>
         <div class='col-md-4 mx-auto text-left form-group'>
           <label for='email'>{{ 'Email'|trans }}</label>
           <input class='form-control mb-4' id='email' name='email' type='email' value='{{ App.Session.has('email') ? App.Session.get('email') }}' required />
           <label for='password'>{{ 'Password'|trans }}</label>
           <!-- add tabindex=-1 to the forget password so we can switch from login to password with tab -->
-          <a href='#' class='align_right underlined resetPassword modalToggle' tabindex='-1' data-modal='resetModal'>{{ 'Forgot password?'|trans }}</a>
+          <a class='align-right clickable underlined resetPassword modalToggle' tabindex='-1' data-modal='resetModal'>{{ 'Forgot password?'|trans }}</a>
           <div class='input-group'>
             <input class='form-control' id='password' name='password' type='password' required />
             <div class='input-group-append'>
@@ -103,9 +108,11 @@
         <!-- Login button -->
         <button type='submit' class='button btn btn-primary' name='Submit'>{{ 'Login'|trans }}</button>
       </form>
+      {% if App.Config.configArr.local_register %}
       <p>{{ "Don't have an account? %sRegister%s now!"|trans|format(
         "<a href='register.php'>",
         "</a>")|raw }}</p>
+      {% endif %}
 
     {% endif %}
 
@@ -125,6 +132,11 @@
               {% endif %}
             {% endfor %}
           </select>
+          <!-- Remember me checkbox -->
+          <div class='form-check mt-2'>
+            <input type='checkbox' class='form-check-input' checked name='rememberme' id='rememberme' />
+            <label for='rememberme' class='form-check-label'>{{ 'Remember me'|trans }}</label>
+          </div>
           <button class='button btn btn-primary mt-2' type='submit' name='submit'>{{ 'Login'|trans }}</button>
         </div>
       </form>
@@ -138,7 +150,7 @@
         <input type='hidden' name='auth_type' value='anon'>
         {{ App.Csrf.getHiddenInput|raw }}
         <div class='form-group mx-auto col-md-4'>
-          <label for='anon_login_select'></label>
+          <label for='anon_login_select' class='sr-only'>{{ 'Select a team'|trans }}</label>
           <div class='input-group mb-2'>
             <div class='input-group-prepend'>
               <div class='input-group-text'>{{ 'Select a team'|trans }}</div>
@@ -155,4 +167,6 @@
     {% endif %}
   {% endif %}
 </section>
+
+<div id='info' data-page='login'></div>
 {% endblock body %}

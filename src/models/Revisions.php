@@ -14,6 +14,7 @@ use function count;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\DestroyableInterface;
+use Elabftw\Traits\SetIdTrait;
 use function mb_strlen;
 use PDO;
 
@@ -22,43 +23,29 @@ use PDO;
  */
 class Revisions implements DestroyableInterface
 {
-    /** @var int MIN_DELTA the min number of characters different between two versions to trigger save */
-    private const MIN_DELTA = 100;
+    use SetIdTrait;
 
-    /** @var Db $Db SQL Database */
-    private $Db;
+    private Db $Db;
 
-    /** @var AbstractEntity $Entity an instance of Experiments or Database */
-    private $Entity;
-
-    /**
-     * Constructor
-     *
-     * @param AbstractEntity $entity
-     */
-    public function __construct(AbstractEntity $entity)
+    public function __construct(private AbstractEntity $Entity, private int $maxRevisions, private int $minDelta, ?int $id = null)
     {
-        $this->Entity = $entity;
         $this->Db = Db::getConnection();
+        $this->id = $id;
     }
 
     /**
      * Add a revision if the changeset is big enough
-     *
-     * @param string $body
-     * @return void
      */
     public function create(string $body): void
     {
-        // only save a revision if there is at least MIN_DELTA characters difference between the old version and the new one
+        // only save a revision if there is at least minimum of delta characters difference between the old version and the new one
         $delta = abs(mb_strlen($this->Entity->entityData['body'] ?? '') - mb_strlen($body));
-        if ($delta < self::MIN_DELTA) {
+        if ($delta < $this->minDelta) {
             return;
         }
 
         // destroy the oldest revision if we're reaching the max count
-        $maxCount = $this->getMaxCount();
-        if ($maxCount !== 0 && ($this->readCount() >= $maxCount)) {
+        if ($this->maxRevisions !== 0 && ($this->readCount() >= $this->maxRevisions)) {
             $this->destroyOld();
         }
         $sql = 'INSERT INTO ' . $this->Entity->type . '_revisions (item_id, body, userid)
@@ -73,8 +60,6 @@ class Revisions implements DestroyableInterface
 
     /**
      * Get how many revisions we have
-     *
-     * @return int number of revisions existing
      */
     public function readCount(): int
     {
@@ -89,8 +74,6 @@ class Revisions implements DestroyableInterface
 
     /**
      * Read all revisions for an item
-     *
-     * @return array
      */
     public function readAll(): array
     {
@@ -111,10 +94,7 @@ class Revisions implements DestroyableInterface
     }
 
     /**
-     * Restore a revision
-     *
-     * @param int $revId The id of the revision we want to restore
-     * @return void
+     * Restore a revision from revision id
      */
     public function restore(int $revId): void
     {
@@ -132,62 +112,48 @@ class Revisions implements DestroyableInterface
         $this->Db->execute($req);
     }
 
-    /**
-     * Destroy a revision
-     */
-    public function destroy(int $id): bool
+    public function destroy(): bool
     {
         $sql = 'DELETE FROM ' . $this->Entity->type . '_revisions WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+
         return $this->Db->execute($req);
     }
 
+    /**
+     * Make sure we don't store too many
+     */
     public function prune(): int
     {
         $numberToRemove = 0;
         $current = count($this->readAll());
-        $max = $this->getMaxCount();
-        if ($current > $max) {
-            $numberToRemove = $max - $current;
+        if ($current > $this->maxRevisions) {
+            $numberToRemove = $this->maxRevisions - $current;
             $this->destroyOld($numberToRemove);
         }
         return $numberToRemove;
     }
 
     /**
-     * Get the maximum number of revisions allowed to be stored
-     *
-     * @return int
-     */
-    private function getMaxCount(): int
-    {
-        $Config = new Config();
-        return (int) $Config->configArr['max_revisions'];
-    }
-
-    /**
      * Destroy old revisions
      *
      * @param int $num number of old revisions to destroy
-     * @return void
      */
     private function destroyOld(int $num = 1): void
     {
         $oldestRevisions = array_slice(array_reverse($this->readAll()), 0, $num);
         foreach ($oldestRevisions as $revision) {
             $idToDelete = (int) $revision['id'];
-            $this->destroy($idToDelete);
+            $this->setId($idToDelete);
+            $this->destroy();
         }
     }
 
     /**
      * Get the body of a revision
-     *
-     * @param int $revId The id of the revision
-     * @return string
      */
-    private function readRev(int $revId)
+    private function readRev(int $revId): string
     {
         $sql = 'SELECT body FROM ' . $this->Entity->type . '_revisions WHERE id = :rev_id';
         $req = $this->Db->prepare($sql);
@@ -203,8 +169,6 @@ class Revisions implements DestroyableInterface
 
     /**
      * Check if item is locked before restoring it
-     *
-     * @return bool
      */
     private function isLocked(): bool
     {

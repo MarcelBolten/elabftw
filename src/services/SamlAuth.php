@@ -28,23 +28,10 @@ use OneLogin\Saml2\Auth as SamlAuthLib;
  */
 class SamlAuth implements AuthInterface
 {
-    /** @var array $configArr the global elab config */
-    private $configArr;
+    private AuthResponse $AuthResponse;
 
-    /** @var array $settings saml settings for a particular idp */
-    private $settings;
-
-    /** @var SamlAuthLib $SamlAuthLib */
-    private $SamlAuthLib;
-
-    /** @var AuthResponse $AuthResponse */
-    private $AuthResponse;
-
-    public function __construct(SamlAuthLib $samlAuthLib, array $configArr, array $settings)
+    public function __construct(private SamlAuthLib $SamlAuthLib, private array $configArr, private array $settings)
     {
-        $this->configArr = $configArr;
-        $this->settings = $settings;
-        $this->SamlAuthLib = $samlAuthLib;
         $this->AuthResponse = new AuthResponse('saml');
     }
 
@@ -139,7 +126,7 @@ class SamlAuth implements AuthInterface
     private function getTeams(array $samlUserdata): array
     {
         $Teams = new Teams(new Users());
-        $teams = $samlUserdata[$this->configArr['saml_team'] ?? 'Nope'];
+        $teams = $samlUserdata[$this->configArr['saml_team'] ?? 'Nope'] ?? array();
 
         // if no team attribute is sent by the IDP, use the default team
         if (empty($teams)) {
@@ -168,8 +155,12 @@ class SamlAuth implements AuthInterface
         // user might not exist yet and populateFromEmail() will throw a ResourceNotFoundException
         try {
             $Users->populateFromEmail($email);
-        } catch (ResourceNotFoundException $e) {
+        } catch (ResourceNotFoundException) {
             // the user doesn't exist yet in the db
+            // what do we do? Lookup the config setting for that case
+            if ($this->configArr['saml_user_default'] === '0') {
+                throw new ImproperActionException('Could not find an existing user. Ask a Sysadmin to create your account.');
+            }
 
             // GET FIRSTNAME AND LASTNAME
             $firstname = $samlUserdata[$this->configArr['saml_firstname']];
@@ -183,9 +174,13 @@ class SamlAuth implements AuthInterface
 
             // now try and get the teams
             $teams = $this->getTeams($samlUserdata);
+            // fix for when the $teams have incorrect dimension
+            if (!isset($teams[0]['id'])) {
+                $teams = $teams[0];
+            }
 
             // CREATE USER (and force validation of user, with user permissions)
-            $Users = new Users($Users->create($email, $teams, $firstname, $lastname, '', 4, true, false));
+            $Users = new Users($Users->create($email, $teams, $firstname, $lastname, '', 4, true, false, false));
         }
         return $Users;
     }

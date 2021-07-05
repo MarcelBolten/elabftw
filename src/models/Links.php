@@ -10,47 +10,40 @@ declare(strict_types=1);
 
 namespace Elabftw\Models;
 
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\Db;
-use Elabftw\Elabftw\ParamsProcessor;
-use Elabftw\Interfaces\CreatableInterface;
-use Elabftw\Interfaces\DestroyableInterface;
-use Elabftw\Interfaces\ReadableInterface;
+use Elabftw\Interfaces\ContentParamsInterface;
+use Elabftw\Interfaces\CrudInterface;
+use Elabftw\Traits\SetIdTrait;
 use PDO;
 
 /**
  * All about the experiments links
  */
-class Links implements CreatableInterface, ReadableInterface, DestroyableInterface
+class Links implements CrudInterface
 {
-    /** @var AbstractEntity $Entity instance of Experiments */
-    public $Entity;
+    use SetIdTrait;
 
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    protected Db $Db;
 
-    /**
-     * Constructor
-     *
-     * @param AbstractEntity $entity
-     */
-    public function __construct(AbstractEntity $entity)
+    public function __construct(public AbstractEntity $Entity, ?int $id = null)
     {
         $this->Db = Db::getConnection();
-        $this->Entity = $entity;
+        $this->id = $id;
     }
 
     /**
      * Add a link to an experiment
      */
-    public function create(ParamsProcessor $params): int
+    public function create(ContentParamsInterface $params): int
     {
-        $link = $params->id;
-        $Database = new Database($this->Entity->Users, $link);
-        $Database->canOrExplode('read');
+        $link = (int) $params->getContent();
+        $Items = new Items($this->Entity->Users, $link);
+        $Items->canOrExplode('read');
         $this->Entity->canOrExplode('write');
 
         // check if this link doesn't exist already
-        $links = $this->read();
+        $links = $this->read(new ContentParams());
         foreach ($links as $existingLink) {
             if ((int) $existingLink['itemid'] === $link) {
                 return 0;
@@ -68,10 +61,8 @@ class Links implements CreatableInterface, ReadableInterface, DestroyableInterfa
 
     /**
      * Get links for an entity
-     *
-     * @return array links of the entity
      */
-    public function read(): array
+    public function read(ContentParamsInterface $params): array
     {
         $sql = 'SELECT items.id AS itemid,
             ' . $this->Entity->type . '_links.id AS linkid,
@@ -134,10 +125,8 @@ class Links implements CreatableInterface, ReadableInterface, DestroyableInterfa
             // add all the teamgroups in which the user is
             $TeamGroups = new TeamGroups($this->Entity->Users);
             $teamgroupsOfUser = $TeamGroups->getGroupsFromUser();
-            if (!empty($teamgroupsOfUser)) {
-                foreach ($teamgroupsOfUser as $teamgroup) {
-                    $sql .= ' OR (entity.canread = ' . $teamgroup . ')';
-                }
+            foreach ($teamgroupsOfUser as $teamgroup) {
+                $sql .= ' OR (entity.canread = ' . $teamgroup . ')';
             }
 
             $sql .= ') ORDER by';
@@ -169,7 +158,6 @@ class Links implements CreatableInterface, ReadableInterface, DestroyableInterfa
      * @param int $id The id of the original entity
      * @param int $newId The id of the new entity that will receive the links
      * @param bool $fromTpl do we duplicate from template?
-     * @return void
      */
     public function duplicate(int $id, int $newId, $fromTpl = false): void
     {
@@ -192,16 +180,19 @@ class Links implements CreatableInterface, ReadableInterface, DestroyableInterfa
         }
     }
 
-    /**
-     * Delete a link
-     */
-    public function destroy(int $id): bool
+    public function update(ContentParamsInterface $params): bool
+    {
+        return false;
+    }
+
+    public function destroy(): bool
     {
         $this->Entity->canOrExplode('write');
 
-        $sql = 'DELETE FROM ' . $this->Entity->type . '_links WHERE id= :id';
+        $sql = 'DELETE FROM ' . $this->Entity->type . '_links WHERE id= :id AND item_id = :item_id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+        $req->bindParam(':item_id', $this->Entity->id, PDO::PARAM_INT);
         return $this->Db->execute($req);
     }
 }

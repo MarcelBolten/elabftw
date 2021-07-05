@@ -17,30 +17,23 @@ use Elabftw\Services\UsersHelper;
  */
 class AuthResponse
 {
-    /** @var int $userid */
-    public $userid;
+    public int $userid;
 
     /** @var array<int, array<int, string>> don't use an array of Team but just the ids and name */
     public $selectableTeams = array();
 
-    /** @var int $selectedTeam */
-    public $selectedTeam;
+    public int $selectedTeam;
 
-    /** @var bool $isAnonymous */
-    public $isAnonymous = false;
+    public bool $isInSeveralTeams = false;
 
-    /** @var string $mfaSecret */
-    public $mfaSecret = '';
+    public bool $isAnonymous = false;
 
-    /** @var bool $hasVerifiedMfa */
-    public $hasVerifiedMfa = false;
+    public ?string $mfaSecret = null;
 
-    /** @var string $isAuthBy */
-    public $isAuthBy;
+    public bool $hasVerifiedMfa = false;
 
-    public function __construct(string $authBy)
+    public function __construct(public string $isAuthBy)
     {
-        $this->isAuthBy = $authBy;
     }
 
     public function setTeams(): void
@@ -51,6 +44,8 @@ class AuthResponse
         // if the user only has access to one team, use this one directly
         if (count($this->selectableTeams) === 1) {
             $this->selectedTeam = (int) $this->selectableTeams[0]['id'];
+        } else {
+            $this->isInSeveralTeams = true;
         }
     }
 }

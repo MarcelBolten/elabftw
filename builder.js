@@ -13,6 +13,8 @@
  */
 const path = require('path');
 const webpack = require('webpack');
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -32,7 +34,6 @@ module.exports = {
       './src/ts/view.ts',
       './src/ts/comments.ts',
       './src/ts/editusers.ts',
-      './src/ts/profile.ts',
       './src/ts/search.ts',
       './src/ts/show.ts',
       './src/ts/sysconfig.ts',
@@ -45,9 +46,9 @@ module.exports = {
       // mathjax config must be loaded before mathjax lib
       './web/app/js/src/mathjax-config.js',
       // load tex with all the extensions
-      'mathjax/es5/tex-svg-full.js',
+      'mathjax-full/es5/tex-svg-full.js',
       'prismjs',
-      // see list in edit.js tinymce codesample plugin settings
+      // see list in tinymce.ts for codesample plugin settings
       'prismjs/components/prism-bash.js',
       'prismjs/components/prism-c.js',
       'prismjs/components/prism-cpp.js',
@@ -58,6 +59,7 @@ module.exports = {
       'prismjs/components/prism-javascript.js',
       'prismjs/components/prism-julia.js',
       'prismjs/components/prism-latex.js',
+      'prismjs/components/prism-lua.js',
       'prismjs/components/prism-makefile.js',
       'prismjs/components/prism-matlab.js',
       'prismjs/components/prism-perl.js',
@@ -65,23 +67,44 @@ module.exports = {
       'prismjs/components/prism-r.js',
       'prismjs/components/prism-ruby.js',
     ],
+    jslibs: [
+      './src/js/vendor/cornify.js',
+      './src/js/vendor/jquery.rating.js',
+      './src/js/vendor/keymaster.js',
+    ],
+    '3Dmol-notrack': [
+      './src/ts/3Dmol-notrack.ts',
+    ],
   },
   // uncomment this to find where the error is coming from
   // makes the build slower
   //devtool: 'inline-source-map',
-  plugins: [
-    // only load the moment locales that we are interested in
-    new webpack.ContextReplacementPlugin(/moment[\\\/]locale$/, /^\.\/(ca|de|en|es|fr|it|id|ja|kr|nl|pl|pt|pt-br|ru|sk|sl|zh-cn)$/),
-  ],
   mode: 'production',
   output: {
     filename: '[name].bundle.js',
-    path: path.resolve(__dirname, 'web/app/js')
+    path: path.resolve(__dirname, 'web/assets')
   },
   optimization: {
     splitChunks: {
       chunks: 'all',
+      name: 'vendor'
     },
+    minimizer: [
+      new CssMinimizerPlugin(),
+    ],
+  },
+  watchOptions: {
+      ignored: /node_modules/
+  },
+  plugins: [
+    new MiniCssExtractPlugin(
+      {
+        filename: 'vendor.min.css',
+      }
+    ),
+  ],
+  resolve: {
+    extensions: ['.ts', '.js'],
   },
   module: {
     rules:[
@@ -94,7 +117,14 @@ module.exports = {
       },
       {
         test: /\.css$/i,
-        use: 'css-loader',
+        use: [
+          MiniCssExtractPlugin.loader,
+          'css-loader',
+        ],
+      },
+      {
+        test: /.(jpg|jpeg|png|svg)$/,
+        use: ['file-loader'],
       },
       // transpile things with babel so javascript works with Edge
       {
@@ -103,11 +133,11 @@ module.exports = {
           loader: 'babel-loader',
           options: {
             presets: ['@babel/preset-env'],
-            compact: false,
+            compact: true,
           }
         }
       },
-      // expose jquery and moment globally
+      // expose jquery globally
       {
         test: require.resolve('jquery'),
         loader: 'expose-loader',
@@ -115,18 +145,12 @@ module.exports = {
           exposes: ['$', 'jQuery'],
         },
       },
+      // expose key for keymaster globally
       {
-        test: require.resolve('moment'),
+        test: /keymaster.js/,
         loader: 'expose-loader',
-          options: {
-            exposes: 'moment',
-          },
-      },
-      // use a custom loader for 3Dmol.js
-      {
-        test: /3Dmol-nojquery.js$/,
-        use: {
-          loader: path.resolve('src/ts/3Dmol-loader.js'),
+        options: {
+          exposes: 'key',
         },
       }
     ]

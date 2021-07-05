@@ -23,12 +23,8 @@ use function substr;
  */
 class UploadsCleaner implements CleanerInterface
 {
-    /** @var FilesystemInterface $filesystem */
-    private $filesystem;
-
-    public function __construct(FilesystemInterface $filesystem)
+    public function __construct(private FilesystemInterface $filesystem)
     {
-        $this->filesystem = $filesystem;
     }
 
     /**
@@ -69,7 +65,6 @@ class UploadsCleaner implements CleanerInterface
      * Given a file path, look in the Db to see if the file is referenced
      *
      * @param string $filePath full path to file
-     * @return bool
      */
     private function isInDb(string $filePath): bool
     {

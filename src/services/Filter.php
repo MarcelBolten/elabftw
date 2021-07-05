@@ -14,7 +14,6 @@ use Elabftw\Exceptions\ImproperActionException;
 use function filter_var;
 use function htmlspecialchars_decode;
 use function mb_strlen;
-use function nl2br;
 use function strip_tags;
 use function strlen;
 use function strtr;
@@ -41,9 +40,6 @@ class Filter
 
     /**
      * Return 0 or 1 if input is on. Used for UCP.
-     *
-     * @param string $input
-     * @return int
      */
     public static function onToBinary(string $input): int
     {
@@ -55,14 +51,13 @@ class Filter
      * return input if it is a valid date
      *
      * @param string|null $input 20160521 or 2020-03-31
-     * @return string
      */
     public static function kdate(?string $input = null): string
     {
         if ($input === null) {
             return date('Ymd');
         }
-        // the search page's datetime inputs will return YYYY-MM-DD
+        // the date inputs will return YYYY-MM-DD
         // so strip the '-'
         $input = strtr($input, array('-' => ''));
         if (mb_strlen($input) === 8) {
@@ -82,9 +77,6 @@ class Filter
 
     /**
      * Simply sanitize string
-     *
-     * @param string $input
-     * @return string
      */
     public static function sanitize(string $input): string
     {
@@ -93,15 +85,6 @@ class Filter
             return '';
         }
         return $output;
-    }
-
-    public static function comment(string $input): string
-    {
-        $output = self::sanitize($input);
-        if (mb_strlen($output) < 2) {
-            throw new ImproperActionException(sprintf(_('Input is too short! (minimum: %d)'), 2));
-        }
-        return nl2br($output);
     }
 
     /**
@@ -144,8 +127,11 @@ class Filter
      * @param string $input Body to sanitize
      * @return string The sanitized body or empty string if there is no input
      */
-    public static function body(string $input): string
+    public static function body(?string $input = null): string
     {
+        if ($input === null) {
+            return '';
+        }
         $whitelist = '<div><br><br /><p><sub><img><sup><strong><b><em><u><a><s><font><span><ul><li><ol><dl><dt><dd>
             <blockquote><h1><h2><h3><h4><h5><h6><hr><table><tr><th><td><code><video><audio><pagebreak><pre>
             <details><summary><figure><figcaption>';
@@ -162,7 +148,6 @@ class Filter
      * also remove | because we use this as separator for tags in SQL
      *
      * @param string $tag the tag to sanitize
-     * @return string
      */
     public static function tag(string $tag): string
     {

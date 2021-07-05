@@ -20,14 +20,13 @@ use PDOStatement;
  */
 final class Db
 {
-    /** @var PDO $connection Connection to PDO */
-    private $connection;
+    private PDO $connection;
 
-    /** @var Db|null $instance store the single instance of the class */
-    private static $instance;
+    // store the single instance of the class
+    private static ?Db $instance = null;
 
-    /** @var int $nq total number of queries */
-    private $nq = 0;
+    // total number of queries
+    private int $nq = 0;
 
     /**
      * Construct of a singleton is private
@@ -96,7 +95,6 @@ final class Db
      * Prepare a query
      *
      * @param string $sql The SQL query
-     * @return PDOStatement
      */
     public function prepare(string $sql): PDOStatement
     {
@@ -107,10 +105,7 @@ final class Db
     /**
      * Execute a prepared statement and throw exception if it doesn't return true
      *
-     * @param PDOStatement $req
      * @param array<mixed>|null $arr optional array to execute
-     *
-     * @return bool
      */
     public function execute(PDOStatement $req, ?array $arr = null): bool
     {
@@ -119,7 +114,7 @@ final class Db
         } catch (PDOException $e) {
             throw new DatabaseErrorException('Error with SQL query', 515, $e);
         }
-        if ($res !== true) {
+        if (!$res) {
             throw new DatabaseErrorException('Error while executing SQL query.');
         }
         return $res;
@@ -129,7 +124,6 @@ final class Db
      * Make a simple query
      *
      * @param string $sql The SQL query
-     * @return PDOStatement
      */
     public function q(string $sql): PDOStatement
     {
@@ -143,8 +137,6 @@ final class Db
 
     /**
      * Return the last id inserted
-     *
-     * @return int
      */
     public function lastInsertId(): int
     {
@@ -153,8 +145,6 @@ final class Db
 
     /**
      * Get number of SQL queries for the page
-     *
-     * @return int
      */
     public function getNumberOfQueries(): int
     {

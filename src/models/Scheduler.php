@@ -13,6 +13,7 @@ namespace Elabftw\Models;
 use DateTime;
 use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\Tools;
+use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Traits\EntityTrait;
@@ -27,18 +28,9 @@ class Scheduler
 {
     use EntityTrait;
 
-    /** @var Database $Database instance of Database */
-    public $Database;
-
-    /**
-     * Constructor
-     *
-     * @param Database $database
-     */
-    public function __construct(Database $database)
+    public function __construct(public Items $Items)
     {
         $this->Db = Db::getConnection();
-        $this->Database = $database;
     }
 
     /**
@@ -56,12 +48,12 @@ class Scheduler
         $sql = 'INSERT INTO team_events(team, item, start, end, userid, title)
             VALUES(:team, :item, :start, :end, :userid, :title)';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
-        $req->bindParam(':item', $this->Database->id, PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':item', $this->Items->id, PDO::PARAM_INT);
         $req->bindParam(':start', $start);
         $req->bindParam(':end', $end);
         $req->bindParam(':title', $title);
-        $req->bindParam(':userid', $this->Database->Users->userData['userid'], PDO::PARAM_INT);
+        $req->bindParam(':userid', $this->Items->Users->userData['userid'], PDO::PARAM_INT);
         $this->Db->execute($req);
 
         return $this->Db->lastInsertId();
@@ -72,7 +64,6 @@ class Scheduler
      *
      * @param string $start 2019-12-23T00:00:00 01:00
      * @param string $end 2019-12-30T00:00:00 01:00
-     * @return array
      */
     public function readAllFromTeam(string $start, string $end): array
     {
@@ -88,7 +79,7 @@ class Scheduler
             WHERE team_events.team = :team
             AND team_events.start > :start AND team_events.end <= :end";
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
         $req->bindParam(':start', $start);
         $req->bindParam(':end', $end);
         $this->Db->execute($req);
@@ -105,7 +96,6 @@ class Scheduler
      *
      * @param string $start 2019-12-23T00:00:00 01:00
      * @param string $end 2019-12-30T00:00:00 01:00
-     * @return array
      */
     public function read(string $start, string $end): array
     {
@@ -122,7 +112,7 @@ class Scheduler
             WHERE team_events.item = :item
             AND team_events.start > :start AND team_events.end <= :end";
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':item', $this->Database->id, PDO::PARAM_INT);
+        $req->bindParam(':item', $this->Items->id, PDO::PARAM_INT);
         $req->bindParam(':start', $start);
         $req->bindParam(':end', $end);
         $this->Db->execute($req);
@@ -136,8 +126,6 @@ class Scheduler
 
     /**
      * Read info from an event id
-     *
-     * @return array
      */
     public function readFromId(): array
     {
@@ -158,7 +146,6 @@ class Scheduler
      * Update the start (and end) of an event (when you drag and drop it)
      *
      * @param array<string, string> $delta timedelta
-     * @return void
      */
     public function updateStart(array $delta): void
     {
@@ -176,7 +163,7 @@ class Scheduler
         $req = $this->Db->prepare($sql);
         $req->bindValue(':start', $newStart->format('c'));
         $req->bindValue(':end', $newEnd->format('c'));
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
     }
@@ -185,7 +172,6 @@ class Scheduler
      * Update the end of an event (when you resize it)
      *
      * @param array<string, string> $delta timedelta
-     * @return void
      */
     public function updateEnd(array $delta): void
     {
@@ -200,45 +186,42 @@ class Scheduler
         $sql = 'UPDATE team_events SET end = :end WHERE team = :team AND id = :id';
         $req = $this->Db->prepare($sql);
         $req->bindValue(':end', $newEnd->format('c'));
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
     }
 
     /**
-     * Bind an experiment to a calendar event
-     *
-     * @param int $expid id of the experiment
-     * @return void
+     * Bind an entity to a calendar event
      */
-    public function bind(int $expid): void
+    public function bind(int $entityid, string $type): bool
     {
-        $sql = 'UPDATE team_events SET experiment = :experiment WHERE team = :team AND id = :id';
+        $this->validateBindType($type);
+
+        $sql = 'UPDATE team_events SET ' . $type . ' = :entity WHERE team = :team AND id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':experiment', $expid, PDO::PARAM_INT);
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':entity', $entityid, PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
-     * Unbind an experiment from a calendar event
-     *
-     * @return void
+     * Unbind an entity from a calendar event
      */
-    public function unbind(): void
+    public function unbind(string $type): bool
     {
-        $sql = 'UPDATE team_events SET experiment = NULL WHERE team = :team AND id = :id';
+        $this->validateBindType($type);
+
+        $sql = 'UPDATE team_events SET ' . $type . ' = NULL WHERE team = :team AND id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':team', $this->Database->Users->userData['team'], PDO::PARAM_INT);
+        $req->bindParam(':team', $this->Items->Users->userData['team'], PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
      * Remove an event
-     *
-     * @return void
      */
     public function destroy(): void
     {
@@ -246,10 +229,10 @@ class Scheduler
         $event = $this->readFromId();
         // if the user is not the same, check if we are admin
         // admin and sysadmin will have usergroup of 1 or 2
-        if ($event['userid'] !== $this->Database->Users->userData['userid'] && (int) $this->Database->Users->userData['usergroup'] <= 2) {
+        if ($event['userid'] !== $this->Items->Users->userData['userid'] && (int) $this->Items->Users->userData['usergroup'] <= 2) {
             // check user is in our team
             $Booker = new Users((int) $event['userid']);
-            if ($Booker->userData['team'] !== $this->Database->Users->userData['team']) {
+            if ($Booker->userData['team'] !== $this->Items->Users->userData['team']) {
                 throw new ImproperActionException(Tools::error(true));
             }
         }
@@ -257,5 +240,13 @@ class Scheduler
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
+    }
+
+    private function validateBindType(string $type): void
+    {
+        $allowedTypes = array('experiment', 'item_link');
+        if (!in_array($type, $allowedTypes, true)) {
+            throw new IllegalActionException('Incorrect bind type for scheduler event');
+        }
     }
 }

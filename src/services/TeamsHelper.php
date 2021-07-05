@@ -15,16 +15,11 @@ use PDO;
 
 class TeamsHelper
 {
-    /** @var Db $Db db connection */
-    private $Db;
+    private Db $Db;
 
-    /** @var int $team */
-    private $team;
-
-    public function __construct(int $team)
+    public function __construct(private int $team)
     {
         $this->Db = Db::getConnection();
-        $this->team = $team;
     }
 
     /**

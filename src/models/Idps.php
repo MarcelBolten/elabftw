@@ -13,34 +13,29 @@ namespace Elabftw\Models;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\DestroyableInterface;
+use Elabftw\Traits\SetIdTrait;
 use PDO;
 
 /**
- * Store informations about different identity providers for auth with SAML
+ * Store information about different identity providers for auth with SAML
  */
 class Idps implements DestroyableInterface
 {
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    use SetIdTrait;
 
-    /**
-     * Constructor
-     *
-     */
-    public function __construct()
+    protected Db $Db;
+
+    public function __construct(?int $id = null)
     {
         $this->Db = Db::getConnection();
+        $this->id = $id;
     }
 
     /**
      * Create an IDP
      *
-     * @param string $name
-     * @param string $entityid
      * @param string $ssoUrl Single Sign On URL
-     * @param string $ssoBinding
      * @param string $sloUrl Single Log Out URL
-     * @param string $sloBinding
      * @param string $x509 Public x509 Certificate
      * @param string $active 0 or 1
      *
@@ -66,8 +61,6 @@ class Idps implements DestroyableInterface
 
     /**
      * Read all IDPs
-     *
-     * @return array
      */
     public function readAll(): array
     {
@@ -85,16 +78,10 @@ class Idps implements DestroyableInterface
     /**
      * Update info about an IDP
      *
-     * @param int $id
-     * @param string $name
-     * @param string $entityid
      * @param string $ssoUrl Single Sign On URL
-     * @param string $ssoBinding
      * @param string $sloUrl Single Log Out URL
-     * @param string $sloBinding
      * @param string $x509 Public x509 Certificate
      * @param string $active 0 or 1
-     * @return void
      */
     public function update(int $id, string $name, string $entityid, string $ssoUrl, string $ssoBinding, string $sloUrl, string $sloBinding, string $x509, string $active): void
     {
@@ -123,8 +110,6 @@ class Idps implements DestroyableInterface
 
     /**
      * Get an active IDP
-     *
-     * @return array
      */
     public function getActive(?int $id = null): array
     {
@@ -145,14 +130,12 @@ class Idps implements DestroyableInterface
         return $res;
     }
 
-    /**
-     * Destroy an IDP
-     */
-    public function destroy(int $id): bool
+    public function destroy(): bool
     {
         $sql = 'DELETE FROM idps WHERE id = :id';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
+        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
+
         return $this->Db->execute($req);
     }
 }

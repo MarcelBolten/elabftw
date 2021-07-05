@@ -31,47 +31,24 @@ class App
     use UploadTrait;
     use TwigTrait;
 
-    /** @var Request $Request the request */
-    public $Request;
+    public const INSTALLED_VERSION = '4.0.5';
 
-    /** @var SessionInterface $Session the session */
-    public $Session;
+    public Users $Users;
 
-    /** @var Config $Config the config stored in sql */
-    public $Config;
+    public string $pageTitle = 'Lab manager';
 
-    /** @var Logger $Log instance of Logger */
-    public $Log;
+    public array $ok = array();
 
-    /** @var Csrf $Csrf instance of Csrf */
-    public $Csrf;
+    public array $ko = array();
 
-    /** @var Users $Users instance of Users */
-    public $Users;
+    public array $warning = array();
 
-    /** @var string $pageTitle the title for the current page */
-    public $pageTitle = 'Lab manager';
+    public array $teamConfigArr = array();
 
-    /** @var array $ok the ok messages from flashBag */
-    public $ok = array();
+    protected Db $Db;
 
-    /** @var array $ko the ko messages from flashBag */
-    public $ko = array();
-
-    /** @var array $warning the warning messages from flashBag */
-    public $warning = array();
-
-    /** @var array $teamConfigArr the config for the current team */
-    public $teamConfigArr = array();
-
-    /** @var Db $Db SQL Database */
-    protected $Db;
-
-    public function __construct(Request $request, SessionInterface $session, Config $config, Logger $log, Csrf $csrf)
+    public function __construct(public Request $Request, public SessionInterface $Session, public Config $Config, public Logger $Log, public Csrf $Csrf)
     {
-        $this->Request = $request;
-        $this->Session = $session;
-
         $flashBag = $this->Session->getBag('flashes');
         // add type check because SessionBagInterface doesn't have get(), only FlashBag has it
         if ($flashBag instanceof FlashBag) {
@@ -80,11 +57,7 @@ class App
             $this->warning = $flashBag->get('warning');
         }
 
-        $this->Config = $config;
-        $this->Log = $log;
         $this->Log->pushHandler(new ErrorLogHandler());
-        $this->Csrf = $csrf;
-
         $this->Users = new Users();
         $this->Db = Db::getConnection();
         // UPDATE SQL SCHEMA if necessary or show error message if version mismatch
@@ -111,7 +84,7 @@ class App
     }
 
     /**
-     * Get the mininum password length for injecting in templates
+     * Get the minimum password length for injecting in templates
      */
     public function getMinPasswordLength(): int
     {
@@ -141,7 +114,7 @@ class App
 
         // team config
         $Teams = new Teams($this->Users);
-        $this->teamConfigArr = $Teams->read();
+        $this->teamConfigArr = $Teams->read(new ContentParams());
     }
 
     /**

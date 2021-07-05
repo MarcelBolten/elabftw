@@ -33,25 +33,17 @@ class MfaHelper
     /** @var string ALGO algorithm used */
     private const ALGO = 'sha1';
 
-    /** @var int DISCREPENCY discrepency parameter to verify the code */
-    private const DISCREPENCY = 2;
+    /** @var int DISCREPANCY discrepancy parameter to verify the code */
+    private const DISCREPANCY = 2;
 
     /** @var int MFA_SECRET_BITS entropy for the mfa secret */
     private const SECRET_BITS = 160;
 
-    /** @var int $userid */
-    public $userid;
+    protected Db $Db;
 
-    /** @var string|null $secret */
-    public $secret;
+    private TwoFactorAuth $TwoFactorAuth;
 
-    /** @var Db $Db SQL Database */
-    protected $Db;
-
-    /** @var TwoFactorAuth $TwoFactorAuth PHP Class for handling two/multi-factor authentication */
-    private $TwoFactorAuth;
-
-    public function __construct(int $userid, ?string $secret = null)
+    public function __construct(public int $userid, public ?string $secret = null)
     {
         $this->TwoFactorAuth = new TwoFactorAuth(
             self::ISSUER,
@@ -61,8 +53,6 @@ class MfaHelper
             new MpdfQrProvider(),
         );
         $this->Db = Db::getConnection();
-        $this->userid = $userid;
-        $this->secret = $secret;
     }
 
     public function getQRCodeImageAsDataUri(string $email): string
@@ -91,7 +81,7 @@ class MfaHelper
     public function verifyCode(string $code): bool
     {
         $code = Filter::sanitize($code);
-        return $this->TwoFactorAuth->verifyCode($this->secret, $code, self::DISCREPENCY);
+        return $this->TwoFactorAuth->verifyCode($this->secret, $code, self::DISCREPANCY);
     }
 
     // only used to emulate the phone app (in MfaCode)

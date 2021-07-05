@@ -15,10 +15,8 @@ use function explode;
 use function filter_var;
 use function in_array;
 use InvalidArgumentException;
-use League\CommonMark\CommonMarkConverter;
-use League\CommonMark\Environment;
 use League\CommonMark\Exception\UnexpectedEncodingException;
-use League\CommonMark\Extension\GithubFlavoredMarkdownExtension;
+use League\CommonMark\GithubFlavoredMarkdownConverter;
 use function mb_strlen;
 use function pathinfo;
 use Symfony\Component\HttpFoundation\Request;
@@ -75,13 +73,15 @@ class Tools
      */
     public static function md2html(string $md): string
     {
-        $environment = Environment::createCommonMarkEnvironment();
-        $environment->addExtension(new GithubFlavoredMarkdownExtension());
+        $config = array(
+            'allow_unsafe_links' => false,
+            'max_nesting_level' => 42,
+        );
 
         try {
-            $converter = new CommonMarkConverter(array('allow_unsafe_links' => false, 'max_nesting_level' => 42), $environment);
+            $converter = new GithubFlavoredMarkdownConverter($config);
             return trim($converter->convertToHtml($md), "\n");
-        } catch (UnexpectedEncodingException $e) {
+        } catch (UnexpectedEncodingException) {
             // fix for incorrect utf8 encoding, just return md and hope it's html
             // so at least the thing is displayed instead of triggering a fatal error
             return $md;
@@ -136,7 +136,6 @@ class Tools
      * Show the units in human format from bytes.
      *
      * @param int $bytes size in bytes
-     * @return string
      */
     public static function formatBytes(int $bytes): string
     {
@@ -149,7 +148,7 @@ class Tools
      * Take a 8 digits input and output 2014.08.16
      *
      * @param string $date Input date '20140302'
-     * @param string $s an optionnal param to specify the separator
+     * @param string $s an optional param to specify the separator
      * @throws InvalidArgumentException
      * @return string The formatted string
      */
@@ -182,7 +181,6 @@ class Tools
      * Display a generic error message
      *
      * @param bool $permission show the out of reach message for permission message
-     * @return string
      */
     public static function error(bool $permission = false): string
     {
@@ -196,7 +194,6 @@ class Tools
      * Return a lang to use with fullcalendar from the pref
      *
      * @param string $lang 'pt_BR' or 'fr_FR'
-     * @return string
      */
     public static function getCalendarLang(string $lang): string
     {
@@ -272,7 +269,7 @@ class Tools
     }
 
     /**
-     * Display the stars rating for a DB item
+     * Display the stars rating for an entity
      *
      * @param int $rating The number of stars to display
      * @return string HTML of the stars
@@ -289,25 +286,27 @@ class Tools
      * Return a full URL of the elabftw install.
      * Will first check for config value of 'url' or try to guess from Request
      *
-     * @param Request $Request
-     * @return string the url
      */
-    public static function getUrl(Request $Request): string
+    public static function getUrl(Request $Request, bool $canonical = false): string
     {
-        $Config = new Config();
+        $Config = Config::getConfig();
 
-        return $Config->configArr['url'] ?? self::getUrlFromRequest($Request);
+        if ($Config->configArr['url']) {
+            return $Config->configArr['url'];
+        }
+        return self::getUrlFromRequest($Request, $canonical);
     }
 
     /**
      * Get the URL from the Request
      *
-     * @param Request $Request
-     * @return string the url
      */
-    public static function getUrlFromRequest(Request $Request): string
+    public static function getUrlFromRequest(Request $Request, bool $canonical = false): string
     {
-        $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort() . $Request->getBasePath();
+        $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort();
+        if (!$canonical) {
+            $url .= $Request->getBasePath();
+        }
         return \str_replace('app/controllers', '', $url);
     }
 
@@ -317,12 +316,15 @@ class Tools
      * @param string $query the searched string
      * @param string $andor behavior of the space character
      * @param string $column the column to search into
-     * @param string $table on which table to do the search
-     * @return string
+     * @param bool $isStrict do we add wildcard characters on each side of the query?
      */
-    public static function getSearchSql(string $query, string $andor = 'and', string $column = '', string $table = ''): string
+    public static function getSearchSql(string $query, string $andor = 'and', string $column = '', bool $isStrict = false): string
     {
         $sql = ' AND ';
+        $wildcard = '%';
+        if ($isStrict) {
+            $wildcard = '';
+        }
         // search character is the separator for and/or
         $qArr = explode(' ', $query);
         $sql .= '(';
@@ -333,15 +335,10 @@ class Tools
             }
             if ($column === '') {
                 // do quicksearch
-                $elabidSql = '';
-                if ($table === 'experiments') {
-                    // add elabid to the search columns
-                    $elabidSql = " OR entity.elabid LIKE '%$value%'";
-                }
-                $sql .= "(entity.title LIKE '%$value%' OR entity.date LIKE '%$value%' OR entity.body LIKE '%$value%' $elabidSql)";
+                $sql .= "(entity.title LIKE '%$value%' OR entity.date LIKE '%$value%' OR entity.body LIKE '%$value%' OR entity.elabid LIKE '%$value%')";
             } else {
                 // from search page
-                $sql .= 'entity.' . $column . " LIKE '%$value%'";
+                $sql .= 'entity.' . $column . " LIKE '" . $wildcard . $value . $wildcard . "'";
             }
         }
         return $sql . ')';
@@ -351,7 +348,6 @@ class Tools
      * Get an array of integer with valid number of items per page based on the current limit
      *
      * @param int $input the current limit for the page
-     * @return array
      */
     public static function getLimitOptions(int $input): array
     {
@@ -376,7 +372,6 @@ class Tools
      * Transform a query object in a query string
      *
      * @param array<string, mixed> $query the query array given by Request
-     * @return string
      */
     public static function qFilter(array $query): string
     {

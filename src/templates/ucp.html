@@ -77,6 +77,12 @@
           <option value='xs' {{ App.Users.userData.display_size == 'xs' ? ' selected' }}>{{ 'Small'|trans }}</option>
       </select>
 
+      <label for='display_mode'>{{ 'Display mode:'|trans }}</label>
+      <select id='display_mode' name='display_mode' class='form-control col-md-3'>
+          <option value='it' {{ App.Users.userData.display_mode == 'it' ? ' selected' }}>{{ 'Item list (default)'|trans }}</option>
+          <option value='tb' {{ App.Users.userData.display_mode == 'tb' ? ' selected' }}>{{ 'Tabular'|trans }}</option>
+      </select>
+
       <label for='orderby'>{{ 'Order by:'|trans }}</label>
       <select id='orderby' name='orderby' class='form-control col-md-3'>
           <option value='default' {{ App.Users.userData.orderby == null ? ' selected' }}>{{ 'Use default'|trans }}</option>
@@ -98,6 +104,13 @@
           {{ App.Users.userData.single_column_layout == '1' ? " checked='checked'" }}
       />
       <label for='layout'>{{ 'Use single column layout'|trans }}</label>
+
+      <div>
+      <input id='uploads_layout' class='mt-2' type='checkbox' name='uploads_layout'
+          {{ App.Users.userData.uploads_layout == '1' ? " checked='checked'" }}
+      />
+      <label for='uploads_layout'>{{ 'Display attached files with thumbnails'|trans }}</label>
+      </div>
     </section>
 
     <section class='box'>
@@ -153,6 +166,11 @@
         />
         <label for='inc_files_pdf'>{{ 'Add attached files summary to the pdf'|trans }}</label>
         <br>
+        <input id='append_pdfs' type='checkbox' name='append_pdfs'
+          {{ App.Users.userData.append_pdfs == '1' ? " checked='checked'" }}
+        />
+        <label for='append_pdfs'>{{ 'Append attached PDFs to exported pdf'|trans }}</label>
+        <br>
         <input id='pdf_sig' type='checkbox' name='pdf_sig'
           {{ App.Request.cookies.get('pdf_sig') == '1' ? " checked='checked'" }}
         />
@@ -176,6 +194,11 @@
         />
         <label for='show_team_templates'>{{ 'Show templates from the team on the Templates page and in the menus'|trans }}</label>
         <br>
+        <input id='show_public' type='checkbox' name='show_public'
+               {{ App.Users.userData.show_public == '1' ? " checked='checked'" }}
+        />
+        <label for='show_public'>{{ 'Show experiments/database items from outside the team'|trans }}</label>
+        <br>
         <input id='chem_editor' type='checkbox' name='chem_editor'
           {{ App.Users.userData.chem_editor == '1' ? " checked='checked'" }}
         />
@@ -190,46 +213,27 @@
           {{ App.Users.userData.use_markdown == '1' ? " checked='checked'" }}
         />
         <label for='use_markdown'>{{ 'Disable the rich text editor and write Markdown directly'|trans }}</label>
+        <br>
+        <input id='use_isodate' type='checkbox' name='use_isodate'
+          {{ App.Users.userData.use_isodate == '1' ? " checked='checked'" }}
+        />
+        <label for='use_isodate'>{{ 'Use ISO datetime in the text editor instead of localized one'|trans }}</label>
         </p>
 
         <p>
         <label for='default-read-select'>{{ 'Default visibility for new experiments'|trans }}</label>
         <select id='default-read-select' name='default_read'>
-            <option value='organization'
-              {{ App.Users.userData.default_read == 'organization' ? " selected='selected'" }}
-            >{{ 'Organization'|trans }}</option>
-            <option value='team'
-              {{ App.Users.userData.default_read == 'team' ? " selected='selected'" }}
-            >{{ 'Team'|trans }}</option>
-            <option value='user'
-              {{ App.Users.userData.default_read == 'user' ? " selected='selected'" }}
-            >{{ 'User'|trans }}</option>
-            {% for teamGroup in teamGroupsArr %}
-                <option value='{{ teamGroup.id }}'
-                  {{ teamGroup.id == App.Users.userData.default_read ? " selected='selected'" }}
-                >{{ 'Group'|trans }} - {{ teamGroup.name }}
-                </option>
-            {% endfor %}
+          {% for key, value in visibilityArr %}
+            <option value='{{ key }}' {{ App.Users.userData.default_read == key ? " selected='selected'" }}>{{ value|trans }}</option>
+          {% endfor %}
         </select>
         </p>
         <p>
         <label for='default-write-select'>{{ 'Default write permission for new experiments'|trans }}</label>
         <select id='default-write-select' name='default_write'>
-            <option value='organization'
-              {{ App.Users.userData.default_write == 'organization' ? " selected='selected'" }}
-            >{{ 'Organization'|trans }}</option>
-            <option value='team'
-              {{ App.Users.userData.default_write == 'team' ? " selected='selected'" }}
-            >{{ 'Team'|trans }}</option>
-            <option value='user'
-              {{ App.Users.userData.default_write == 'user' ? " selected='selected'" }}
-            >{{ 'User'|trans }}</option>
-            {% for teamGroup in teamGroupsArr %}
-                <option value='{{ teamGroup.id }}'
-                  {{ teamGroup.id == App.Users.userData.default_write ? " selected='selected'" }}
-                >{{ 'Group'|trans }} - {{ teamGroup.name }}
-                </option>
-            {% endfor %}
+          {% for key, value in visibilityArr %}
+            <option value='{{ key }}' {{ App.Users.userData.default_write == key ? " selected='selected'" }}>{{ value|trans }}</option>
+          {% endfor %}
         </select>
         </p>
 
@@ -243,7 +247,7 @@
 
 </div>
 
-<!-- TAB 2 - USER INFORMATIONS -->
+<!-- TAB 2 - USER INFORMATION -->
 <div class='divhandle' id='tab2div'>
     <div class='box'>
 
@@ -346,7 +350,7 @@
             </div>
         </div>
 
-        <div class='submitButtonDiv'>
+        <div class='mt-4 text-center'>
             <button type='submit' name='Submit' class='button btn btn-primary'>{{ 'Update profile'|trans }}</button>
         </div>
     </form>
@@ -362,43 +366,41 @@
 <div class='divhandle' id='tab4div'>
   <div class='box'>
     <h3>{{ 'API keys'|trans }}</h3>
-      <h5>{{ 'Existing keys'|trans }}</h5>
-      <table id='apiTable' class='table'>
-        <thead>
-          <tr>
-            <th scope='col'>#</th>
-            <th scope='col'>{{ 'Name'|trans }}</th>
-            <th scope='col'>{{ 'Permissions'|trans }}</th>
-            <th scope='col'>{{ 'Creation date'|trans }}</th>
-            <th scope='col'>{{ 'Action'|trans }}</th>
-          </tr>
-        </thead>
-    <tbody>
-      {% for key in apiKeysArr %}
+    <div id='newKeyPlaceholder'></div>
+    <h5>{{ 'Create new key'|trans }}</h5>
+      <label for='apikeyName'>{{ 'Name'|trans }}</label>
+      <input id='apikeyName' type='text' />
+      <label for='apikeyCanwrite'>{{ 'Permissions'|trans }}</label>
+      <select id='apikeyCanwrite' autocomplete='off'>
+        <option value='0'>{{ 'Read Only'|trans }}</option>
+        <option value='1'>{{ 'Read/Write'|trans }}</option>
+      </select>
+      <button class='button btn btn-primary' type='submit' data-action='create-apikey'>{{ 'Generate an API Key'|trans }}</button>
+
+    <h5>{{ 'Existing keys'|trans }}</h5>
+    <table id='apiTable' class='table'>
+      <thead>
+        <tr>
+          <th scope='col'>#</th>
+          <th scope='col'>{{ 'Name'|trans }}</th>
+          <th scope='col'>{{ 'Permissions'|trans }}</th>
+          <th scope='col'>{{ 'Creation date'|trans }}</th>
+          <th scope='col'>{{ 'Action'|trans }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key in apiKeysArr %}
           <tr>
             <th scope='row'>{{ loop.index }}</th>
             <td>{{ key.name }}</td>
             <td>{{ key.can_write ? 'Read/Write'|trans : 'Read Only'|trans }}</td>
             <td>{{ key.created_at }}</td>
-            <td><i class='fas fa-trash-alt fa-2x clickable keyDestroy' title='Delete' data-id='{{ key.id }}'></i></td>
+            <td><a class='clickable' data-action='destroy-apikey' title='{{ 'Delete'|trans }}' data-apikeyid='{{ key.id }}'><i class='fas fa-trash-alt fa-2x'></i></a></td>
           </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        {% endfor %}
+      </tbody>
+    </table>
 
-  <h5>{{ 'Create new key'|trans }}</h5>
-  <form method='post' action='app/controllers/UcpController.php' autocomplete='off'>
-      {{ App.Csrf.getHiddenInput|raw }}
-      <input type='hidden' name='createApiKey' />
-      <label for='name'>{{ 'Name'|trans }}</label>
-      <input id='name' name='name' type='text' required />
-      <label for='canWrite'>{{ 'Permissions'|trans }}</label>
-      <select name='canWrite' id='canWrite' autocomplete='off'>
-          <option value='0'>{{ 'Read Only'|trans }}</option>
-          <option value='1'>{{ 'Read/Write'|trans }}</option>
-      </select>
-      <button class='button btn btn-primary' type='submit'>{{ 'Generate an API Key'|trans }}</button>
-  </form>
   </div>
 </div>
 <!-- END PAGE -->

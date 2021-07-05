@@ -20,15 +20,21 @@ If you don't get a reply in the next 48h, it means I'm probably dead.
 
 ## Steps taken in the development process
 
-For every new commit, the dependencies are checked by [Snyk.io](https://snyk.io/) to look for vulnerabilities in the dependencies. A vulnerability found means a broken test suite.
-
-There is also GitHub notifying me of new vulnerabilities it finds in the dependencies.
+GitHub/Dependabot is regularly scanning the dependencies and will report if a version used has a known vulnerability.
 
 The code itself is checked by various static analyzers to try and detect bugs sooner. And best practices are used to prevent SQL injection (with prepared statements), XSS (with a Content-Security-Policy header), and other nasty things.
 
 If you scan the live demo for good practices and security headers, you'll find that eLabFTW scores very very high:
 
 [![observatory score a+](https://i.imgur.com/2qI796u.png)](https://observatory.mozilla.org/analyze/demo.elabftw.net)
+
+## Best practices
+
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/2766/badge)](https://bestpractices.coreinfrastructure.org/projects/2766)
+
+**eLabFTW** follows the best practices edicted by The Linux Foundation [Core Infrastructure Initiative](https://bestpractices.coreinfrastructure.org/en).
+
+You can see the criteria [on this page](https://bestpractices.coreinfrastructure.org/en/projects/2766).
 
 ## Running an elabftw instance securely
 
@@ -38,7 +44,7 @@ Here is a list of steps you should follow to increase the security of your insta
 
 ### Run the Docker container
 
-**eLabFTW**'s container has been fine tuned for maximizing safety. For instance, the default PHP configuration has been modified to make the session identifier longer, in a specific folder with tight permissions, a lot of functions not used in elabftw are forbidden, the cookies have the httpOnly and secure flags, and other details that might not be easily modifiable if installed outside Docker.
+**eLabFTW**'s container has been fine tuned for maximizing safety. For instance, the default PHP configuration has been modified to make the session identifier longer, in a specific folder with tight permissions, a lot of functions not used in elabftw are forbidden, the cookies have the httpOnly, SameSite and secure flags, and other details that might not be easily modifiable if installed outside Docker.
 
 Nginx also has a custom configuration with secure headers sent to the client.
 

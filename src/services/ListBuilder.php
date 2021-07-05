@@ -12,8 +12,8 @@ namespace Elabftw\Services;
 
 use Elabftw\Elabftw\DisplayParams;
 use Elabftw\Models\AbstractEntity;
-use Elabftw\Models\Database;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 
 /**
  * Create lists of experiments/items for consumption by js code
@@ -32,7 +32,6 @@ class ListBuilder
      * Get an array formatted for the autocomplete input (link and bind)
      *
      * @param string $term the query
-     * @return array
      */
     public function getAutocomplete(string $term): array
     {
@@ -50,7 +49,6 @@ class ListBuilder
      * for use with the mention plugin of tinymce (# autocomplete)
      *
      * @param string $term the query
-     * @return array
      */
     public function getMentionList(string $term): array
     {
@@ -59,7 +57,7 @@ class ListBuilder
         // add items from database
         $itemsArr = $this->getList($term);
 
-        if ($this->Entity instanceof Database) {
+        if ($this->Entity instanceof Items) {
             foreach ($itemsArr as $item) {
                 $mentionArr[] = array('name' => "<a href='database.php?mode=view&id=" .
                     $item['id'] . "'>[" . $item['category'] . '] ' . $item['title'] . '</a>',
@@ -83,7 +81,6 @@ class ListBuilder
      * Get a list of experiments/items with title containing $term
      *
      * @param string $term the query
-     * @return array
      */
     private function getList(string $term): array
     {

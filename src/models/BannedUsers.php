@@ -18,28 +18,17 @@ use PDO;
  */
 class BannedUsers
 {
-    /** @var Config $Config Master configuration */
-    public $Config;
+    protected Db $Db;
 
-    /** @var Db $Db SQL Database */
-    protected $Db;
-
-    /**
-     * Constructor
-     *
-     * @param Config $config
-     */
-    public function __construct(Config $config)
+    public function __construct(public Config $Config)
     {
         $this->Db = Db::getConnection();
-        $this->Config = $config;
     }
 
     /**
      * Add a banned user
      *
      * @param string $fingerprint Should be the md5 of IP + useragent
-     * @return bool
      */
     public function create(string $fingerprint): bool
     {
@@ -52,8 +41,6 @@ class BannedUsers
 
     /**
      * Select all actively banned users
-     *
-     * @return array
      */
     public function readAll(): array
     {
@@ -69,5 +56,12 @@ class BannedUsers
             return array();
         }
         return $res;
+    }
+
+    public function clearAll(): bool
+    {
+        $sql = 'DELETE FROM banned_users';
+        $req = $this->Db->prepare($sql);
+        return $req->execute();
     }
 }

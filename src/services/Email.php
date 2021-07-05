@@ -30,28 +30,16 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class Email
 {
-    /** @var Config $Config instance of Config */
-    private $Config;
+    public string $footer;
 
-    /** @var Users $Users instance of Users */
-    private $Users;
-
-    /**
-     * Constructor
-     *
-     * @param Config $config
-     * @param Users $users
-     */
-    public function __construct(Config $config, Users $users)
+    public function __construct(private Config $Config, private Users $Users)
     {
-        $this->Config = $config;
-        $this->Users = $users;
+        $this->footer = $this->makeFooter();
     }
 
     /**
      * Send an email
      *
-     * @param Swift_Message $message
      * @throws ImproperActionException
      * @return int number of email sent
      */
@@ -68,9 +56,7 @@ class Email
     /**
      * Send a test email
      *
-     * @param string $email
      * @throws ImproperActionException
-     * @return bool
      */
     public function testemailSend(string $email): bool
     {
@@ -78,7 +64,6 @@ class Email
             throw new ImproperActionException('Bad email!');
         }
 
-        $footer = "\n\n~~~\nSent from eLabFTW https://www.elabftw.net\n";
         $message = (new Swift_Message())
         // Give the message a subject
         ->setSubject(_('[eLabFTW] Test email'))
@@ -87,7 +72,7 @@ class Email
         // Set the To addresses with an associative array
         ->setTo(array($email => 'Admin eLabFTW'))
         // Give it a body
-        ->setBody('Congratulations, you correctly configured eLabFTW to send emails! :)' . $footer);
+        ->setBody('Congratulations, you correctly configured eLabFTW to send emails! :)' . $this->footer);
 
         return (bool) $this->send($message);
     }
@@ -95,9 +80,6 @@ class Email
     /**
      * Send a mass email to all users
      *
-     * @param string $subject
-     * @param string $body
-     * @param bool $teamFilter
      * @return int number of emails sent
      */
     public function massEmail(string $subject, string $body, bool $teamFilter = false): int
@@ -113,14 +95,12 @@ class Email
             $from = array($this->Config->configArr['mail_from'] => 'eLabFTW');
         }
 
-        // get all email adresses
+        // get all email addresses
         $usersArr = $this->Users->getAllEmails($teamFilter);
         $bcc = array();
         foreach ($usersArr as $user) {
             $bcc[] = $user['email'];
         }
-
-        $footer = "\n\n~~~\nSent from eLabFTW https://www.elabftw.net\n";
 
         $message = (new Swift_Message())
         ->setSubject($subject)
@@ -128,7 +108,7 @@ class Email
         ->setTo($from)
         // Set recipients in BCC to protect email addresses
         ->setBcc($bcc)
-        ->setBody($body . $footer);
+        ->setBody($body . $this->footer);
 
         return $this->send($message);
     }
@@ -136,10 +116,7 @@ class Email
     /**
      * Send an email to the admin of a team
      *
-     * @param int $team
      * @param array<string, mixed> $userInfo to get the email and name of new user
-     * @param bool $needValidation
-     * @return void
      */
     public function alertAdmin(int $team, array $userInfo, bool $needValidation = true): void
     {
@@ -162,7 +139,6 @@ class Email
                 $url,
             );
         }
-        $footer = "\n\n~~~\nSent from eLabFTW https://www.elabftw.net\n";
 
         $message = (new Swift_Message())
         // Give the message a subject
@@ -172,7 +148,7 @@ class Email
         // Set the To
         ->setTo($this->getAdminEmail($team))
         // Give it a body
-        ->setBody($main . $footer);
+        ->setBody($main . $this->footer);
         // SEND EMAIL
         $this->send($message);
     }
@@ -183,7 +159,6 @@ class Email
      * their account to work right away.
      *
      * @param string $email email of the user to notify
-     * @return void
      */
     public function alertUserNeedValidation($email): void
     {
@@ -191,7 +166,6 @@ class Email
             return;
         }
         // Create the message
-        $footer = "\n\n~~~\nSent from eLabFTW https://www.elabftw.net\n";
         $message = (new Swift_Message())
         // Give the message a subject
         ->setSubject(_('[eLabFTW] Your account has been created'))
@@ -200,7 +174,7 @@ class Email
         // Set the To
         ->setTo($email)
         // Give it a body
-        ->setBody(_('Hi. Your account has been created but it is currently inactive (you cannot log in). The team admin has been notified and will validate your account. You will receive an email when it is done.') . $footer);
+        ->setBody(_('Hi. Your account has been created but it is currently inactive (you cannot log in). The team admin has been notified and will validate your account. You will receive an email when it is done.') . $this->footer);
         // SEND EMAIL
         $this->send($message);
     }
@@ -209,7 +183,6 @@ class Email
      * Alert a user that they are validated
      *
      * @param string $email email of the newly validated user
-     * @return void
      */
     public function alertUserIsValidated($email): void
     {
@@ -221,7 +194,6 @@ class Email
         $Request = Request::createFromGlobals();
         $url = \rtrim(Tools::getUrl($Request), '/') . '/login.php';
 
-        $footer = "\n\n~~~\nSent from eLabFTW https://www.elabftw.net\n";
         // Create the message
         $message = (new Swift_Message())
         // Give the message a subject
@@ -232,9 +204,15 @@ class Email
         // Set the To addresses with an associative array
         ->setTo(array($email => 'eLabFTW'))
         // Give it a body
-        ->setBody(_('Hello. Your account on eLabFTW was validated by an admin. Follow this link to login: ') . $url . $footer);
+        ->setBody(_('Hello. Your account on eLabFTW was validated by an admin. Follow this link to login: ') . $url . $this->footer);
         // now we try to send the email
         $this->send($message);
+    }
+
+    private function makeFooter(): string
+    {
+        $url = Tools::getUrl(Request::createFromGlobals());
+        return sprintf("\n\n~~~\n%s %s\n", _('Sent from eLabFTW'), $url);
     }
 
     /**
@@ -246,7 +224,7 @@ class Email
      */
     private function getAdminEmail($team): array
     {
-        // array for storing email adresses of admin(s)
+        // array for storing email addresses of admin(s)
         $arr = array();
         $Db = Db::getConnection();
 
@@ -271,8 +249,6 @@ class Email
 
     /**
      * Return Swift_Mailer instance and choose between sendmail and smtp
-     *
-     * @return Swift_Mailer
      */
     private function getMailer(): Swift_Mailer
     {

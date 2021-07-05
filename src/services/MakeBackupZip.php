@@ -12,8 +12,8 @@ namespace Elabftw\Services;
 
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Models\AbstractEntity;
-use Elabftw\Models\Database;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 use PDO;
 use ZipStream\Option\Archive as ArchiveOptions;
 use ZipStream\ZipStream;
@@ -23,26 +23,17 @@ use ZipStream\ZipStream;
  */
 class MakeBackupZip extends AbstractMake
 {
-    /** @var ZipStream $Zip the ZipStream object */
-    private $Zip;
+    private ZipStream $Zip;
 
-    /** @var string $period start and finish dates */
-    private $period = '15000101-30000101';
+    // files to be deleted by destructor
+    private array $trash = array();
 
-    /** @var array $trash files to be deleted by destructor */
-    private $trash = array();
-
-    /** @var string $folder name of folder */
-    private $folder = '';
+    private string $folder = '';
 
     /**
      * Give me a time period, I make good zip for you
-     *
-     * @param AbstractEntity $entity
-     * @param string $period 20010101-20201231
-     * @return void
      */
-    public function __construct(AbstractEntity $entity, string $period)
+    public function __construct(AbstractEntity $entity, private string $period)
     {
         parent::__construct($entity);
 
@@ -54,14 +45,10 @@ class MakeBackupZip extends AbstractMake
         $opt = new ArchiveOptions();
         $opt->setFlushOutput(true);
         $this->Zip = new ZipStream(null, $opt);
-
-        $this->period = $period;
     }
 
     /**
      * Clean up the temporary files (csv and pdf)
-     *
-     * @return void
      */
     public function __destruct()
     {
@@ -72,8 +59,6 @@ class MakeBackupZip extends AbstractMake
 
     /**
      * Get the name of the generated file
-     *
-     * @return string
      */
     public function getFileName(): string
     {
@@ -83,8 +68,6 @@ class MakeBackupZip extends AbstractMake
     /**
      * Loop on each id and add it to our zip archive
      * This could be called the main function.
-     *
-     * @return void
      */
     public function getZip(): void
     {
@@ -103,7 +86,6 @@ class MakeBackupZip extends AbstractMake
      * Add the .asn1 token and the timestamped pdf to the zip archive
      *
      * @param int $id The id of current item we are zipping
-     * @return void
      */
     private function addTimestampFiles(int $id): void
     {
@@ -131,25 +113,22 @@ class MakeBackupZip extends AbstractMake
 
     /**
      * Folder and zip file name begins with date for experiments
-     *
-     * @return string
      */
     private function getBaseFileName(): string
     {
         if ($this->Entity instanceof Experiments) {
             return $this->Entity->entityData['date'] . ' - ' . Filter::forFilesystem($this->Entity->entityData['title']);
-        } elseif ($this->Entity instanceof Database) {
+        } elseif ($this->Entity instanceof Items) {
             return $this->Entity->entityData['category'] . ' - ' . Filter::forFilesystem($this->Entity->entityData['title']);
         }
 
-        throw new ImproperActionException(sprintf('Entity of type %s is not allowed in this context', get_class($this->Entity)));
+        throw new ImproperActionException(sprintf('Entity of type %s is not allowed in this context', $this->Entity::class));
     }
 
     /**
      * Add attached files
      *
      * @param array<array-key, array<string, string>> $filesArr the files array
-     * @return void
      */
     private function addAttachedFiles($filesArr): void
     {
@@ -171,8 +150,6 @@ class MakeBackupZip extends AbstractMake
 
     /**
      * Add a PDF file to the ZIP archive
-     *
-     * @return void
      */
     private function addPdf(): void
     {
@@ -186,7 +163,6 @@ class MakeBackupZip extends AbstractMake
      * This is where the magic happens
      *
      * @param int $id The id of the item we are zipping
-     * @return void
      */
     private function addToZip(int $id, string $fullname): void
     {

@@ -17,8 +17,8 @@ use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\InvalidCsrfTokenException;
 use Elabftw\Exceptions\UnauthorizedException;
-use Elabftw\Models\Database;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 use Elabftw\Models\ItemsTypes;
 use Elabftw\Models\Status;
 use Elabftw\Models\Templates;
@@ -43,24 +43,24 @@ try {
             if (!$App->Session->get('is_admin')) {
                 throw new IllegalActionException('Non admin user tried to access admin controller.');
             }
-            $Entity = new ItemsTypes($App->Users);
+            $Entity = new ItemsTypes($App->Users->team);
             break;
         case 'status':
             if (!$App->Session->get('is_admin')) {
                 throw new IllegalActionException('Non admin user tried to access admin controller.');
             }
-            $Entity = new Status($App->Users);
+            $Entity = new Status($App->Users->team);
             break;
         case 'experiments_steps':
             $model = new Experiments($App->Users);
             $Entity = $model->Steps;
             break;
         case 'items_steps':
-            $model = new Database($App->Users);
+            $model = new Items($App->Users);
             $Entity = $model->Steps;
             break;
         case 'todolist':
-            $Entity = new Todolist($App->Users);
+            $Entity = new Todolist((int) $App->Users->userData['userid']);
             break;
         case 'experiments_templates':
             $Entity = new Templates($App->Users);

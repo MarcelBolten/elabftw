@@ -13,6 +13,7 @@ namespace Elabftw\Services;
 use Elabftw\Exceptions\DatabaseErrorException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Models\Users;
+use Elabftw\Traits\EntityTrait;
 use function League\Csv\delimiter_detect;
 use League\Csv\Reader;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,11 +23,13 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class ImportCsv extends AbstractImport
 {
-    /** @var int $inserted number of items we got into the database */
-    public $inserted = 0;
+    use EntityTrait;
 
-    /** @var string $delimiter the separation character of the csv provided by user */
-    private $delimiter;
+    // number of items we got into the database
+    public int $inserted = 0;
+
+    // the separation character of the csv provided by user
+    private string $delimiter;
 
     /**
      * Constructor
@@ -48,7 +51,6 @@ class ImportCsv extends AbstractImport
      * Do the work
      *
      * @throws ImproperActionException
-     * @return void
      */
     public function import(): void
     {
@@ -59,8 +61,8 @@ class ImportCsv extends AbstractImport
         $rows = $csv->getRecords();
 
         // SQL for importing
-        $sql = 'INSERT INTO items(team, title, date, body, userid, category, canread)
-            VALUES(:team, :title, :date, :body, :userid, :category, :canread)';
+        $sql = 'INSERT INTO items(team, title, date, body, userid, category, canread, elabid)
+            VALUES(:team, :title, :date, :body, :userid, :category, :canread, :elabid)';
         $req = $this->Db->prepare($sql);
 
         $date = Filter::kdate();
@@ -71,6 +73,7 @@ class ImportCsv extends AbstractImport
                 throw new ImproperActionException('Could not find the title column!');
             }
             $body = $this->getBodyFromRow($row);
+            $elabid = $this->generateElabid();
 
             $req->bindParam(':team', $this->Users->userData['team']);
             $req->bindParam(':title', $row['title']);
@@ -79,6 +82,7 @@ class ImportCsv extends AbstractImport
             $req->bindParam(':userid', $this->Users->userData['userid']);
             $req->bindParam(':category', $this->target);
             $req->bindParam(':canread', $this->canread);
+            $req->bindParam(':elabid', $elabid);
             if ($req->execute() === false) {
                 throw new DatabaseErrorException('Error inserting data in database!');
             }
@@ -90,7 +94,6 @@ class ImportCsv extends AbstractImport
      * Generate a body from a row. Add column name in bold and content after that.
      *
      * @param array<string, string> $row row from the csv
-     * @return string
      */
     private function getBodyFromRow(array $row): string
     {
@@ -111,9 +114,6 @@ class ImportCsv extends AbstractImport
 
     /**
      * Make sure the delimiter character is what is intended
-     *
-     * @param Reader $csv
-     * @return void
      */
     private function checkDelimiter(Reader $csv): void
     {

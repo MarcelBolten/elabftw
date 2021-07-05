@@ -22,16 +22,8 @@ use Symfony\Component\HttpFoundation\Session\SessionInterface;
  */
 class Csrf
 {
-    /** @var Request $Request the request object */
-    private $Request;
-
-    /** @var SessionInterface $Session the session object */
-    private $Session;
-
-    public function __construct(Request $request, SessionInterface $session)
+    public function __construct(private Request $Request, private SessionInterface $Session)
     {
-        $this->Request = $request;
-        $this->Session = $session;
         if (!$this->Session->has('csrf')) {
             $this->Session->set('csrf', $this->generate());
         }
@@ -39,8 +31,6 @@ class Csrf
 
     /**
      * Return the form key for inclusion in HTML
-     *
-     * @return string
      */
     public function getHiddenInput(): string
     {
@@ -49,8 +39,6 @@ class Csrf
 
     /**
      * Read token from session
-     *
-     * @return string
      */
     public function getToken(): string
     {
@@ -59,8 +47,6 @@ class Csrf
 
     /**
      * Validate the form key against the one previously set in Session
-     *
-     * @return void
      */
     public function validate(): void
     {
@@ -74,15 +60,13 @@ class Csrf
         } else {
             $res = $this->validateForm();
         }
-        if ($res === false) {
+        if (!$res) {
             throw new InvalidCsrfTokenException();
         }
     }
 
     /**
      * Generate a CSRF token
-     *
-     * @return string
      */
     private function generate(): string
     {
@@ -91,8 +75,6 @@ class Csrf
 
     /**
      * AJAX requests find the token in header
-     *
-     * @return bool
      */
     private function validateAjax(): bool
     {
@@ -101,8 +83,6 @@ class Csrf
 
     /**
      * Normal forms send the token with hidden field
-     *
-     * @return bool
      */
     private function validateForm(): bool
     {

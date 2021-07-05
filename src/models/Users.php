@@ -10,13 +10,14 @@ declare(strict_types=1);
 
 namespace Elabftw\Models;
 
-use function bin2hex;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\ResourceNotFoundException;
+use Elabftw\Interfaces\ContentParamsInterface;
 use Elabftw\Services\Check;
 use Elabftw\Services\Email;
+use Elabftw\Services\EmailValidator;
 use Elabftw\Services\Filter;
 use Elabftw\Services\TeamsHelper;
 use Elabftw\Services\UsersHelper;
@@ -24,8 +25,8 @@ use function filter_var;
 use function hash;
 use function in_array;
 use function mb_strlen;
+use function password_hash;
 use PDO;
-use function random_bytes;
 use function time;
 
 /**
@@ -33,28 +34,17 @@ use function time;
  */
 class Users
 {
-    /** @var bool $needValidation flag to check if we need validation or not */
-    public $needValidation = false;
+    public bool $needValidation = false;
 
-    /** @var array $userData what you get when you read() */
-    public $userData = array();
+    public array $userData = array();
 
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    public int $team = 0;
 
-    /** @var int $team */
-    private $team;
+    protected Db $Db;
 
-    /**
-     * Constructor
-     *
-     * @param int|null $userid
-     * @param int|null $team
-     */
     public function __construct(?int $userid = null, ?int $team = null)
     {
         $this->Db = Db::getConnection();
-        $this->team = 0;
         if ($team !== null) {
             $this->team = $team;
         }
@@ -65,8 +55,6 @@ class Users
 
     /**
      * Populate userData property
-     *
-     * @param int $userid
      */
     public function populate(int $userid): void
     {
@@ -80,7 +68,7 @@ class Users
      */
     public function create(string $email, array $teams, string $firstname = '', string $lastname = '', string $password = '', ?int $group = null, bool $forceValidation = false, bool $normalizeTeams = true, bool $alertAdmin = true): int
     {
-        $Config = new Config();
+        $Config = Config::getConfig();
         $Teams = new Teams($this);
 
         // make sure that all the teams in which the user will be are created/exist
@@ -88,10 +76,9 @@ class Users
         if ($normalizeTeams) {
             $teams = $Teams->getTeamsFromIdOrNameOrOrgidArray($teams);
         }
-        // check for duplicate of email
-        if ($this->isDuplicateEmail($email)) {
-            throw new ImproperActionException(_('Someone is already using that email address!'));
-        }
+
+        $EmailValidator = new EmailValidator($email, $Config->configArr['email_domain']);
+        $EmailValidator->validate();
 
         if ($password !== '') {
             Check::passwordLength($password);
@@ -100,10 +87,8 @@ class Users
         $firstname = filter_var($firstname, FILTER_SANITIZE_STRING);
         $lastname = filter_var($lastname, FILTER_SANITIZE_STRING);
 
-        // Create salt
-        $salt = hash('sha512', bin2hex(random_bytes(16)));
-        // Create hash
-        $passwordHash = hash('sha512', $salt . $password);
+        // Create password hash
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
         // Registration date is stored in epoch
         $registerDate = time();
@@ -124,29 +109,26 @@ class Users
 
         $sql = 'INSERT INTO users (
             `email`,
-            `password`,
+            `password_hash`,
             `firstname`,
             `lastname`,
             `usergroup`,
-            `salt`,
             `register_date`,
             `validated`,
             `lang`
         ) VALUES (
             :email,
-            :password,
+            :password_hash,
             :firstname,
             :lastname,
             :usergroup,
-            :salt,
             :register_date,
             :validated,
             :lang);';
         $req = $this->Db->prepare($sql);
 
         $req->bindParam(':email', $email);
-        $req->bindParam(':salt', $salt);
-        $req->bindParam(':password', $passwordHash);
+        $req->bindParam(':password_hash', $passwordHash);
         $req->bindParam(':firstname', $firstname);
         $req->bindParam(':lastname', $lastname);
         $req->bindParam(':register_date', $registerDate);
@@ -160,7 +142,8 @@ class Users
         $Teams->addUserToTeams($userid, array_column($teams, 'id'));
         $userInfo = array('email' => $email, 'name' => $firstname . ' ' . $lastname);
         $Email = new Email($Config, $this);
-        if ($alertAdmin) {
+        // just skip this if we don't have proper normalized teams
+        if ($alertAdmin && isset($teams[0]['id'])) {
             $Email->alertAdmin((int) $teams[0]['id'], $userInfo, !(bool) $validated);
         }
         if ($validated === 0) {
@@ -172,26 +155,7 @@ class Users
     }
 
     /**
-     * Check we have not a duplicate email in DB
-     *
-     * @param string $email
-     * @return bool true if there is a duplicate
-     */
-    public function isDuplicateEmail(string $email): bool
-    {
-        $sql = 'SELECT email FROM users WHERE email = :email AND archived = 0';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':email', $email);
-        $this->Db->execute($req);
-
-        return (bool) $req->rowCount();
-    }
-
-    /**
      * Get info about a user
-     *
-     * @param int $userid
-     * @return array
      */
     public function read(int $userid): array
     {
@@ -212,13 +176,10 @@ class Users
 
     /**
      * Get users matching a search term for consumption in autocomplete
-     *
-     * @param string $term
-     * @return array
      */
-    public function getList(string $term): array
+    public function getList(ContentParamsInterface $params): array
     {
-        $usersArr = $this->readFromQuery($term);
+        $usersArr = $this->readFromQuery($params->getContent());
         $res = array();
         foreach ($usersArr as $user) {
             $res[] = $user['userid'] . ' - ' . $user['fullname'];
@@ -228,9 +189,6 @@ class Users
 
     /**
      * Select by email
-     *
-     * @param string $email
-     * @return void
      */
     public function populateFromEmail(string $email): void
     {
@@ -252,7 +210,6 @@ class Users
      *
      * @param string $query the searched term
      * @param bool $teamFilter toggle between sysadmin/admin view
-     * @return array
      */
     public function readFromQuery(string $query, bool $teamFilter = false): array
     {
@@ -287,8 +244,6 @@ class Users
 
     /**
      * Read all users from the team
-     *
-     * @return array
      */
     public function readAllFromTeam(): array
     {
@@ -298,7 +253,8 @@ class Users
             users.cellphone,
             users.website,
             users.skype,
-            users.validated
+            users.validated,
+            users.usergroup
             FROM users
             CROSS JOIN users2teams ON (users2teams.users_id = users.userid AND users2teams.teams_id = :team)
             LEFT JOIN teams ON (teams.id = :team)
@@ -316,9 +272,6 @@ class Users
 
     /**
      * Get email for every single user
-     *
-     * @param bool $fromTeam
-     * @return array
      */
     public function getAllEmails(bool $fromTeam = false): array
     {
@@ -343,7 +296,6 @@ class Users
      * Update user from the editusers template
      *
      * @param array<string, mixed> $params POST
-     * @return void
      */
     public function update(array $params): void
     {
@@ -406,16 +358,21 @@ class Users
      * Update things from UCP
      *
      * @param array<string, mixed> $params
-     * @return void
      */
     public function updateAccount(array $params): void
     {
         $params['firstname'] = filter_var($params['firstname'], FILTER_SANITIZE_STRING);
         $params['lastname'] = filter_var($params['lastname'], FILTER_SANITIZE_STRING);
         $params['email'] = filter_var($params['email'], FILTER_SANITIZE_EMAIL);
+        if ($params['email'] === false) {
+            throw new ImproperActionException('Invalid email!');
+        }
 
-        if ($this->isDuplicateEmail($params['email']) && ($params['email'] != $this->userData['email'])) {
-            throw new ImproperActionException(_('Someone is already using that email address!'));
+        // if we change the email, make sure it's valid
+        if ($params['email'] !== $this->userData['email']) {
+            $Config = Config::getConfig();
+            $EmailValidator = new EmailValidator($params['email'], $Config->configArr['email_domain']);
+            $EmailValidator->validate();
         }
 
         // Check default_role
@@ -456,29 +413,22 @@ class Users
 
     /**
      * Update the password for the user
-     *
-     * @param string $password The new password
-     * @return void
      */
     public function updatePassword(string $password): void
     {
         Check::passwordLength($password);
 
-        $salt = \hash('sha512', \bin2hex(\random_bytes(16)));
-        $passwordHash = \hash('sha512', $salt . $password);
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-        $sql = 'UPDATE users SET salt = :salt, password = :password, token = null WHERE userid = :userid';
+        $sql = 'UPDATE users SET password_hash = :password_hash, token = null WHERE userid = :userid';
         $req = $this->Db->prepare($sql);
-        $req->bindParam(':salt', $salt);
-        $req->bindParam(':password', $passwordHash);
+        $req->bindParam(':password_hash', $passwordHash);
         $req->bindParam(':userid', $this->userData['userid'], PDO::PARAM_INT);
         $this->Db->execute($req);
     }
 
     /**
      * Validate current user instance
-     *
-     * @return void
      */
     public function validate(): void
     {
@@ -487,14 +437,12 @@ class Users
         $req->bindParam(':userid', $this->userData['userid'], PDO::PARAM_INT);
         $this->Db->execute($req);
         // send an email to the user
-        $Email = new Email(new Config(), $this);
+        $Email = new Email(Config::getConfig(), $this);
         $Email->alertUserIsValidated($this->userData['email']);
     }
 
     /**
      * Archive/Unarchive a user
-     *
-     * @return void
      */
     public function toggleArchive(): void
     {
@@ -506,8 +454,6 @@ class Users
 
     /**
      * Lock all the experiments owned by user
-     *
-     * @return void
      */
     public function lockExperiments(): void
     {
@@ -521,8 +467,6 @@ class Users
 
     /**
      * Destroy user. Will completely remove everything from the user.
-     *
-     * @return void
      */
     public function destroy(): void
     {

@@ -21,32 +21,16 @@ use function rtrim;
  */
 class Saml
 {
-    /** @var Config $Config instance of Config */
-    public $Config;
+    private array $settings = array();
 
-    /** @var Idps $Idps instance of Idps */
-    private $Idps;
-
-    /** @var array $settings the saml settings array */
-    private $settings = array();
-
-    /**
-     * Constructor
-     *
-     * @param Config $config
-     * @param Idps $idps
-     */
-    public function __construct(Config $config, Idps $idps)
+    public function __construct(public Config $Config, private Idps $Idps)
     {
-        $this->Config = $config;
-        $this->Idps = $idps;
     }
 
     /**
      * Get the settings array
      *
      * @param int|null $id id of the selected idp
-     * @return array
      */
     public function getSettings(?int $id = null): array
     {

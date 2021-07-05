@@ -5,7 +5,8 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import Template from './Template.class';
+import EntityClass from './Entity.class';
+import { EntityType } from './interfaces';
 import { notif } from './misc';
 import i18next from 'i18next';
 import 'jquery-ui/ui/widgets/autocomplete';
@@ -35,7 +36,7 @@ import listPlugin from '@fullcalendar/list';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import { config } from '@fortawesome/fontawesome-svg-core';
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
   if (window.location.pathname !== '/team.php') {
     return;
   }
@@ -129,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // on click activate modal window
     eventClick: function(info): void {
       if (!editable) { return; }
-      $('#rmBind').hide();
+      $('[data-action="scheduler-rm-bind"]').hide();
       ($('#eventModal') as any).modal('toggle');
       // delete button in modal
       $('#deleteEvent').on('click', function(): void {
@@ -147,29 +148,38 @@ document.addEventListener('DOMContentLoaded', function() {
       // fill the bound div
       $('#eventTitle').text(info.event.title);
       if (info.event.extendedProps.experiment != null) {
-        $('#eventBound').html('Event is bound to an <a href="experiments.php?mode=view&id=' + info.event.extendedProps.experiment + '">experiment</a>.');
-        $('#rmBind').show();
+        $('#eventBoundExp').html('Event is bound to an <a href="experiments.php?mode=view&id=' + info.event.extendedProps.experiment + '">experiment</a>.');
+        $('[data-action="scheduler-rm-bind"][data-type="experiment"]').show();
+      }
+      if (info.event.extendedProps.item_link != null) {
+        $('#eventBoundDb').html('Event is bound to an <a href="database.php?mode=view&id=' + info.event.extendedProps.item_link + '">item</a>.');
+        $('[data-action="scheduler-rm-bind"][data-type="item_link"]').show();
       }
       // bind an experiment to the event
-      $('#goBind').on('click', function(): void {
-        $.post('app/controllers/SchedulerController.php', {
-          bind: true,
-          id: info.event.id,
-          expid: parseInt(($('#bindinput').val() as string), 10),
-        }).done(function(json) {
-          notif(json);
-          if (json.res) {
-            $('#bindinput').val('');
-            ($('#eventModal') as any).modal('toggle');
-            window.location.replace('team.php?tab=1&item=' + $('#info').data('item') + '&start=' + encodeURIComponent(info.event.start.toString()));
-          }
-        });
+      $('[data-action="scheduler-bind-entity"]').on('click', function(): void {
+        const entityid = parseInt(($('#' + $(this).data('input')).val() as string), 10);
+        if (entityid > 0) {
+          $.post('app/controllers/SchedulerController.php', {
+            bind: true,
+            id: info.event.id,
+            entityid: entityid,
+            type: $(this).data('type'),
+          }).done(function(json) {
+            notif(json);
+            if (json.res) {
+              $('#bindinput').val('');
+              ($('#eventModal') as any).modal('toggle');
+              window.location.replace('team.php?tab=1&item=' + $('#info').data('item') + '&start=' + encodeURIComponent(info.event.start.toString()));
+            }
+          });
+        }
       });
       // remove the binding
-      $('#rmBind').on('click', function(): void {
+      $('[data-action="scheduler-rm-bind"]').on('click', function(): void {
         $.post('app/controllers/SchedulerController.php', {
           unbind: true,
           id: info.event.id,
+          type: $(this).data('type'),
         }).done(function(json) {
           ($('#eventModal') as any).modal('toggle');
           notif(json);
@@ -177,8 +187,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       });
       // BIND AUTOCOMPLETE
+      // TODO refactor this
+      // NOTE: previously the input div had ui-front jquery ui class to make the autocomplete list show properly, but with the new item input below
+      // it didn't work well, so now the automplete uses appendTo option
       const cache = {};
-      $('#bindinput').autocomplete({
+      $('#bindexpinput').autocomplete({
+        appendTo: '#binddivexp',
         source: function(request: any, response: any): void {
           const term = request.term;
           if (term in cache) {
@@ -186,6 +200,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
           }
           $.getJSON('app/controllers/EntityAjaxController.php?source=experiments', request, function(data) {
+            cache[term] = data;
+            response(data);
+          });
+        }
+      });
+      $('#binddbinput').autocomplete({
+        appendTo: '#binddivdb',
+        source: function(request: any, response: any): void {
+          const term = request.term;
+          if (term in cache) {
+            response(cache[term]);
+            return;
+          }
+          $.getJSON('app/controllers/EntityAjaxController.php?source=items', request, function(data) {
             cache[term] = data;
             response(data);
           });
@@ -234,8 +262,12 @@ document.addEventListener('DOMContentLoaded', function() {
     calendar.updateSize();
   }
 
-  // IMPORT TPL
-  $(document).on('click', '.importTpl', function() {
-    new Template().duplicate($(this).data('id'));
+  // Add click listener and do action based on which element is clicked
+  document.querySelector('.real-container').addEventListener('click', (event) => {
+    const el = (event.target as HTMLElement);
+    // IMPORT TPL
+    if (el.matches('[data-action="import-template"]')) {
+      new EntityClass(EntityType.Template).duplicate(parseInt(el.dataset.id));
+    }
   });
 });

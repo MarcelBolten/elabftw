@@ -34,30 +34,30 @@ try {
         $AuthResponse = $AuthService->assertIdpResponse();
 
         // if the user is in several teams, we need to redirect to the team selection
-        if ($AuthResponse->selectedTeam === null) {
+        if ($AuthResponse->isInSeveralTeams) {
             $App->Session->set('team_selection_required', true);
             $App->Session->set('team_selection', $AuthResponse->selectableTeams);
             $App->Session->set('auth_userid', $AuthResponse->userid);
             $location = '../../login.php';
         } else {
             $LoginHelper = new LoginHelper($AuthResponse, $App->Session);
-            $LoginHelper->login(false);
+            $LoginHelper->login((bool) $App->Request->cookies->get('icanhazcookies'));
         }
         $location = $App->Request->cookies->get('redirect') ?? $location;
+        // we don't use a RedirectResponse but show a temporary redirection page or it will not work properly
+        echo "<html><head><meta http-equiv='refresh' content='1;url=$location' /><title>You are being redirected...</title></head><body>You are being redirected...</body></html>";
+        exit;
     }
 
     $Response = new RedirectResponse($location);
-    // TODO FIXME saml breaks if this line is removed
-    // this is a problem of the redirect response not working
-    // unless there is something shown/sent to the user before
-    // no idea why
-    var_dump($App->Request->request->get('SAMLResponse'));
+    $Response->send();
 } catch (ImproperActionException $e) {
     $template = 'error.html';
     $renderArr = array('error' => $e->getMessage());
     $Response = new Response();
     $Response->prepare($Request);
     $Response->setContent($App->render($template, $renderArr));
+    $Response->send();
 } catch (Exception $e) {
     // log error and show general error message
     $App->Log->error('', array('Exception' => $e));
@@ -66,6 +66,5 @@ try {
     $Response = new Response();
     $Response->prepare($Request);
     $Response->setContent($App->render($template, $renderArr));
-} finally {
     $Response->send();
 }

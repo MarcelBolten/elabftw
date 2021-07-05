@@ -15,7 +15,8 @@ namespace Elabftw\Services;
 use DateTime;
 use Defuse\Crypto\Crypto;
 use Defuse\Crypto\Key;
-use Elabftw\Elabftw\ReleaseCheck;
+use Elabftw\Elabftw\App;
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Exceptions\FilesystemErrorException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Models\Config;
@@ -42,46 +43,36 @@ class MakeTimestamp extends AbstractMake
     /** default hash algo for file */
     private const HASH_ALGORITHM = 'sha256';
 
-    /** @var Experiments $Entity instance of Experiments */
+    /** @var Experiments $Entity */
     protected $Entity;
 
-    /** @var Config $Config instance of Config */
-    private $Config;
+    private string $pdfPath = '';
 
-    /** @var string $pdfPath full path to pdf */
-    private $pdfPath = '';
+    // name of the pdf (elabid-timestamped.pdf)
+    private string $pdfRealName = '';
 
-    /** @var string $pdfRealName name of the pdf (elabid-timestamped.pdf) */
-    private $pdfRealName = '';
+    // a random long string
+    private string $pdfLongName = '';
 
-    /** @var string $pdfLongName a hash */
-    private $pdfLongName = '';
+    // config (url, login, password, cert)
+    private array $stampParams = array();
 
-    /** @var array $stampParams config (url, login, password, cert) */
-    private $stampParams = array();
+    // things that get deleted with destruct method
+    private array $trash = array();
 
-    /** @var array $trash things that get deleted with destruct method */
-    private $trash = array();
+    // where we store the request file
+    private string $requestfilePath = '';
 
-    /** @var string $requestfilePath where we store the request file */
-    private $requestfilePath = '';
-
-    /** @var string $responsefilePath where we store the asn1 token */
-    private $responsefilePath = '';
+    // where we store the asn1 token
+    private string $responsefilePath = '';
 
     /**
-     * Pdf is generated on instanciation and after you need to call timestamp()
-     *
-     * @param Config $config
-     * @param Teams $teams
-     * @param Experiments $entity
+     * Pdf is generated on instantiation and after you need to call timestamp()
      */
-    public function __construct(Config $config, Teams $teams, Experiments $entity)
+    public function __construct(private Config $Config, Teams $teams, Experiments $entity)
     {
         parent::__construct($entity);
         $this->Entity->canOrExplode('write');
-
-        $this->Config = $config;
 
         // initialize with info from config
         $this->stampParams = $this->getTimestampParameters($teams);
@@ -108,7 +99,6 @@ class MakeTimestamp extends AbstractMake
      * The realname is elabid-timestamped.pdf
      *
      * @throws ImproperActionException
-     * @return string
      */
     public function getFileName(): string
     {
@@ -122,79 +112,10 @@ class MakeTimestamp extends AbstractMake
     }
 
     /**
-     * Decode asn1 encoded token
-     *
-     * @param string $token
-     * @return string
-     */
-    public function decodeAsn1($token): string
-    {
-        $output = $this->runProcess(array(
-            'openssl',
-            'asn1parse',
-            '-inform',
-            'DER',
-            '-in',
-            $this->getUploadsPath() . $token,
-        ));
-        $lines = explode("\n", $output);
-
-        // now let's parse this
-        $out = '<br><hr>';
-
-        $statusArr = explode(':', $lines[4]);
-        $status = $statusArr[3];
-
-        $versionArr = explode(':', $lines[111]);
-        $version = $versionArr[3];
-
-        $oidArr = explode(':', $lines[148]);
-        $oid = $oidArr[3];
-
-        $hashArr = explode(':', $lines[12]);
-        $hash = $hashArr[3];
-
-        $messageArr = explode(':', $lines[17]);
-        $message = $messageArr[3];
-
-        $utctimeArr = explode(':', $lines[142]);
-        $utctime = rtrim($utctimeArr[3], 'Z');
-        $timestamp = \DateTime::createFromFormat('ymdHis', $utctime);
-        if ($timestamp === false) {
-            return 'Error: Could not parse timestamp!';
-        }
-
-        $countryArr = explode(':', $lines[31]);
-        $country = $countryArr[3];
-
-        $tsaArr = explode(':', $lines[121]);
-        $tsa = $tsaArr[3];
-
-        $tsaArr = explode(':', $lines[39]);
-        $tsa .= ', ' . $tsaArr[3];
-        $tsaArr = explode(':', $lines[43]);
-        $tsa .= ', ' . $tsaArr[3];
-
-        $out .= '<strong>Status</strong>: ' . $status;
-        $out .= '<br>Version: ' . $version;
-        $out .= '<br>OID: ' . $oid;
-        $out .= '<br>Hash algorithm: ' . $hash;
-        $out .= '<br>Message data: 0x' . $message;
-        $out .= '<br>Timestamp: ' . $timestamp->format('Y-m-d H:i:s P');
-
-        $out .= '<br><br><strong>TSA info:</strong>';
-        $out .= '<br>TSA: ' . $tsa;
-        $out .= '<br>Country: ' . $country;
-
-        return $out;
-    }
-
-    /**
      * The main function.
      * Request a timestamp and parse the response.
      *
      * @throws ImproperActionException
-     * @return void
      */
     public function timestamp(): void
     {
@@ -222,8 +143,6 @@ class MakeTimestamp extends AbstractMake
 
     /**
      * Generate the pdf to timestamp
-     *
-     * @return void
      */
     private function generatePdf(): void
     {
@@ -236,12 +155,11 @@ class MakeTimestamp extends AbstractMake
     /**
      * Return the needed parameters to request/verify a timestamp
      *
-     * @param Teams $teams
      * @return array<string,string>
      */
     private function getTimestampParameters(Teams $teams): array
     {
-        $teamConfigArr = $teams->read();
+        $teamConfigArr = $teams->read(new ContentParams());
         // if there is a config in the team, use that
         // otherwise use the general config if we can
         if (mb_strlen($teamConfigArr['stampprovider'] ?? '') > 2) {
@@ -287,7 +205,6 @@ class MakeTimestamp extends AbstractMake
      *
      * @param array<string> $args arguments including the executable
      * @param string|null $cwd command working directory
-     * @return string
      */
     private function runProcess(array $args, ?string $cwd = null): string
     {
@@ -301,7 +218,6 @@ class MakeTimestamp extends AbstractMake
      * Creates a Timestamp Requestfile from a filename
      *
      * @throws ImproperActionException
-     * @return void
      */
     private function createRequestfile(): void
     {
@@ -323,7 +239,6 @@ class MakeTimestamp extends AbstractMake
      * Extracts the unix timestamp from the base64-encoded response string as returned by signRequestfile
      *
      * @throws ImproperActionException if unhappy
-     * @return string
      */
     private function getResponseTime(): string
     {
@@ -389,7 +304,6 @@ class MakeTimestamp extends AbstractMake
      * Contact the TSA and receive a token after successful timestamp
      *
      * @throws ImproperActionException
-     * @return \Psr\Http\Message\ResponseInterface
      */
     private function postData(): \Psr\Http\Message\ResponseInterface
     {
@@ -399,7 +313,7 @@ class MakeTimestamp extends AbstractMake
             // add user agent
             // http://developer.github.com/v3/#user-agent-required
             'headers' => array(
-                'User-Agent' => 'Elabftw/' . ReleaseCheck::INSTALLED_VERSION,
+                'User-Agent' => 'Elabftw/' . App::INSTALLED_VERSION,
                 'Content-Type' => 'application/timestamp-query',
                 'Content-Transfer-Encoding' => 'base64',
             ),
@@ -446,7 +360,6 @@ class MakeTimestamp extends AbstractMake
      *
      * @throws ImproperActionException
      * @param StreamInterface $binaryToken asn1 response from TSA
-     * @return void
      */
     private function saveToken(StreamInterface $binaryToken): void
     {
@@ -486,7 +399,6 @@ class MakeTimestamp extends AbstractMake
      * in the timestamp itself.
      *
      * @throws ImproperActionException
-     * @return bool
      */
     private function validate(): bool
     {
@@ -508,7 +420,7 @@ class MakeTimestamp extends AbstractMake
                 '-CAfile',
                 $certPath,
             ));
-        } catch (ProcessFailedException $e) {
+        } catch (ProcessFailedException) {
             // we are facing the OpenSSL bug discussed here:
             // https://github.com/elabftw/elabftw/issues/242#issuecomment-212382182
             return $this->validateWithJava();
@@ -519,8 +431,6 @@ class MakeTimestamp extends AbstractMake
 
     /**
      * Check if we have java
-     *
-     * @return void
      */
     private function isJavaInstalled(): void
     {
@@ -536,7 +446,6 @@ class MakeTimestamp extends AbstractMake
      * We need this because of the openssl bug
      *
      * @throws ImproperActionException
-     * @return bool
      */
     private function validateWithJava(): bool
     {
@@ -564,7 +473,6 @@ class MakeTimestamp extends AbstractMake
      * I had this idea when realizing that if you comment an experiment, the hash won't be good anymore. Because the pdf will contain the new comments.
      * Keeping the pdf here is the best way to go, as this leaves room to leave comments.
      * @throws ImproperActionException
-     * @return void
      */
     private function sqlInsertPdf(): void
     {

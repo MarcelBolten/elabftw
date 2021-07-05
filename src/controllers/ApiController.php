@@ -10,22 +10,27 @@ declare(strict_types=1);
 
 namespace Elabftw\Controllers;
 
+use function dirname;
 use Elabftw\Elabftw\App;
+use Elabftw\Elabftw\ContentParams;
+use Elabftw\Elabftw\CreateTemplate;
+use Elabftw\Elabftw\CreateUpload;
 use Elabftw\Elabftw\DisplayParams;
-use Elabftw\Elabftw\ParamsProcessor;
+use Elabftw\Elabftw\EntityParams;
+use Elabftw\Elabftw\TagParams;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Exceptions\UnauthorizedException;
 use Elabftw\Interfaces\ControllerInterface;
 use Elabftw\Models\AbstractCategory;
-use Elabftw\Models\AbstractEntity;
 use Elabftw\Models\ApiKeys;
-use Elabftw\Models\Database;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\Items;
 use Elabftw\Models\ItemsTypes;
 use Elabftw\Models\Scheduler;
 use Elabftw\Models\Status;
+use Elabftw\Models\Templates;
 use Elabftw\Models\Uploads;
 use Elabftw\Models\Users;
 use Elabftw\Services\Check;
@@ -41,46 +46,39 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ApiController implements ControllerInterface
 {
-    /** @var App $App */
-    private $App;
+    private Request $Request;
 
-    /** @var Request $Request instance of Request */
-    private $Request;
+    /** @psalm-suppress PropertyNotSetInConstructor */
+    private AbstractCategory $Category;
 
-    /** @var AbstractCategory $Category instance of ItemsTypes or Status
-     * @psalm-suppress PropertyNotSetInConstructor */
-    private $Category;
-
-    /** @var AbstractEntity $Entity instance of Entity
-     * @psalm-suppress PropertyNotSetInConstructor */
+    /** @psalm-suppress PropertyNotSetInConstructor */
+    //@phpstan-ignore-next-line
     private $Entity;
 
-    /** @var Scheduler $Scheduler instance of Scheduler
-     * @psalm-suppress PropertyNotSetInConstructor */
-    private $Scheduler;
+    /** @psalm-suppress PropertyNotSetInConstructor */
+    private Scheduler $Scheduler;
 
-    /** @var Users $Users the authenticated user */
-    private $Users;
+    private Users $Users;
 
-    /** @var array $allowedMethods allowed HTTP methods */
-    private $allowedMethods = array('GET', 'POST', 'DELETE');
+    private array $allowedMethods = array('GET', 'POST', 'DELETE');
 
-    /** @var bool $canWrite can we do POST methods? */
-    private $canWrite = false;
+    private bool $canWrite = false;
 
-    /** @var int|null $id the id at the end of the url */
-    private $id;
+    private int $limit = 15;
 
-    /** @var string $endpoint experiments, items or uploads */
-    private $endpoint;
+    private int $offset = 0;
 
-    /** @var string $param used by backupzip to get the period */
-    private $param;
+    private ?int $id;
 
-    public function __construct(App $app)
+    // experiments, items or uploads
+    private string $endpoint;
+
+    // used by backupzip to get the period
+    private string $param;
+
+    public function __construct(private App $App)
     {
-        $this->App = $app;
-        $this->Request = $app->Request;
+        $this->Request = $App->Request;
         // Check if the Authorization Token was sent along
         if (!$this->Request->server->has('HTTP_AUTHORIZATION')) {
             throw new UnauthorizedException('No access token provided!');
@@ -89,11 +87,6 @@ class ApiController implements ControllerInterface
         $this->parseReq();
     }
 
-    /**
-     * Get Response from Request
-     *
-     * @return Response
-     */
     public function getResponse(): Response
     {
         try {
@@ -110,7 +103,10 @@ class ApiController implements ControllerInterface
                 if ($this->endpoint === 'experiments' || $this->endpoint === 'items') {
                     return $this->getEntity();
                 }
-                if ($this->endpoint === 'items_types' || $this->endpoint === 'status') {
+                if ($this->endpoint === 'templates' || $this->endpoint === 'items_types') {
+                    return $this->getTemplate();
+                }
+                if ($this->endpoint === 'status') {
                     return $this->getCategory();
                 }
                 if ($this->endpoint === 'bookable') {
@@ -137,7 +133,9 @@ class ApiController implements ControllerInterface
                 }
 
                 // TITLE DATE BODY UPDATE
-                if ($this->Request->request->has('date')) {
+                if ($this->Request->request->has('date') ||
+                    $this->Request->request->has('title') ||
+                    $this->Request->request->has('body')) {
                     return $this->updateEntity();
                 }
 
@@ -161,8 +159,10 @@ class ApiController implements ControllerInterface
                 }
 
                 // CREATE AN EXPERIMENT/ITEM
-                if ($this->Entity instanceof Database) {
+                if ($this->Entity instanceof Items) {
                     return $this->createItem();
+                } elseif ($this->Entity instanceof Templates) {
+                    return $this->createTemplate();
                 }
                 return $this->createExperiment();
             }
@@ -182,23 +182,57 @@ class ApiController implements ControllerInterface
 
     /**
      * Set the id and endpoints fields
-     *
-     * @return void
      */
     private function parseReq(): void
     {
-        $args = explode('/', rtrim($this->Request->query->get('req') ?? '', '/'));
+        /**
+         * so we receive the request already split in two by nginx
+         * first part is "req" and then if there is any query string it ends up in "args"
+         * generate an array with the request that looks like this
+         * for /api/v1/experiments/1:
+         *   array(5) {
+         *   [0]=>
+         *   string(0) ""
+         *   [1]=>
+         *   string(3) "api"
+         *   [2]=>
+         *   string(2) "v1"
+         *   [3]=>
+         *   string(11) "experiments"
+         *   [4]=>
+         *   string(1) "1"
+         *   }
+         */
+        $req = explode('/', rtrim((string) $this->Request->query->get('req'), '/'));
+
+        // now parse the query string (part after ?)
+        $args = (string) ($this->Request->query->get('args') ?? '');
+        if (!empty($args)) {
+            // this is where we store the parsed query string parameters
+            $result = array('limit' => $this->limit, 'offset' => $this->offset);
+            // this function doesn't return anything
+            parse_str($args, $result);
+            // now assign our result to class properties
+            if (isset($result['limit'])) {
+                $this->limit = (int) $result['limit'];
+            }
+            if (isset($result['offset'])) {
+                $this->offset = (int) $result['offset'];
+            }
+        }
 
         // assign the id if there is one
         $id = null;
-        if (Check::id((int) end($args)) !== false) {
-            $id = (int) end($args);
+        if (Check::id((int) end($req)) !== false) {
+            $id = (int) end($req);
         }
         $this->id = $id;
 
         // assign the endpoint (experiments, items, uploads, items_types, status)
-        $this->endpoint = array_shift($args);
-        $this->param = array_shift($args) ?? '';
+        // 0 is "", 1 is "api", 2 is "v1"
+        $this->endpoint = $req[3];
+        // used by backup zip only for now
+        $this->param = $req[4] ?? '';
 
         // verify the key and load user info
         $ApiKeys = new ApiKeys(new Users());
@@ -211,13 +245,15 @@ class ApiController implements ControllerInterface
         if ($this->endpoint === 'experiments' || $this->endpoint === 'uploads' || $this->endpoint === 'backupzip' || $this->endpoint === 'tags') {
             $this->Entity = new Experiments($this->Users, $this->id);
         } elseif ($this->endpoint === 'items' || $this->endpoint === 'bookable') {
-            $this->Entity = new Database($this->Users, $this->id);
+            $this->Entity = new Items($this->Users, $this->id);
+        } elseif ($this->endpoint === 'templates') {
+            $this->Entity = new Templates($this->Users, $this->id);
         } elseif ($this->endpoint === 'items_types') {
-            $this->Category = new ItemsTypes($this->Users);
+            $this->Entity = new ItemsTypes($this->Users->team);
         } elseif ($this->endpoint === 'status') {
-            $this->Category = new Status($this->Users);
+            $this->Category = new Status($this->Users->team);
         } elseif ($this->endpoint === 'events') {
-            $this->Entity = new Database($this->Users, $this->id);
+            $this->Entity = new Items($this->Users, $this->id);
             $this->Scheduler = new Scheduler($this->Entity);
         } else {
             throw new ImproperActionException('Bad endpoint!');
@@ -257,6 +293,7 @@ class ApiController implements ControllerInterface
      * @apiSuccess {String} fullname Name of the owner of the experiment
      * @apiSuccess {Number} has_attachment Number of files attached
      * @apiSuccess {Number} id Id of the item
+     * @apiSuccess {String} elabid Unique elabid of the item
      * @apiSuccess {Number} locked 0 if not locked, 1 if locked
      * @apiSuccess {Number} rating Number of stars
      * @apiSuccess {String} tags Tags separated by '|'
@@ -319,29 +356,74 @@ class ApiController implements ControllerInterface
      * @apiSuccess {String} canwrite Write permission of the experiment
      *
      */
-
-    /**
-     * Get experiment or item, one or several
-     *
-     * @return Response
-     */
     private function getEntity(): Response
     {
         if ($this->id === null) {
             $DisplayParams = new DisplayParams();
             $DisplayParams->adjust($this->App);
-            // default DisplayParams is 16, crank it up to 9000
-            // in the future maybe use limit/offset/page query params
-            $DisplayParams->limit = 9000;
+
+            // use our limit/offset
+            // remove 1 to limit as there is 1 added in the sql query
+            $DisplayParams->limit = $this->limit - 1;
+            $DisplayParams->offset = $this->offset;
             return new JsonResponse($this->Entity->readShow($DisplayParams, false));
         }
         $this->Entity->canOrExplode('read');
         // add the uploaded files
         $this->Entity->entityData['uploads'] = $this->Entity->Uploads->readAll();
         // add the linked items
-        $this->Entity->entityData['links'] = $this->Entity->Links->read();
+        $this->Entity->entityData['links'] = $this->Entity->Links->read(new ContentParams());
         // add the steps
-        $this->Entity->entityData['steps'] = $this->Entity->Steps->read();
+        $this->Entity->entityData['steps'] = $this->Entity->Steps->read(new ContentParams());
+
+        return new JsonResponse($this->Entity->entityData);
+    }
+
+    /**
+     * @api {get} /templates/[:id] Read templates
+     * @apiName GetTemplate
+     * @apiGroup Entity
+     * @apiDescription Get the data from templates or just one template if id is set.
+     * @apiUse GetEntity
+     * @apiExample {python} Python example
+     * import elabapy
+     * manager = elabapy.Manager(endpoint="https://elab.example.org/api/v1/", token="3148")
+     * # get all templates
+     * all_tpl = manager.get_all_templates()
+     * # get template with id 42
+     * tpl = manager.get_template(42)
+     * print(json.dumps(tpl, indent=4, sort_keys=True))
+     * @apiExample {shell} Curl example
+     * export TOKEN="3148"
+     * # get all templates
+     * curl -H "Authorization: $TOKEN" https://elab.example.org/api/v1/templates
+     * # get template with id 42
+     * curl -H "Authorization: $TOKEN" https://elab.example.org/api/v1/templates/42
+     * @apiSuccess {String} body Main content
+     * @apiSuccess {Number} date Date in YYYYMMDD format
+     * @apiSuccess {String} fullname Name of the owner of the experiment
+     * @apiSuccess {Number} id Id of the experiment
+     * @apiSuccess {Number} locked 0 if not locked, 1 if locked
+     * @apiSuccess {Number} lockedby 1 User id of the locker
+     * @apiSuccess {DateTime} lockedwhen Time when it was locked
+     * @apiSuccess {String} tags Tags separated by '|'
+     * @apiSuccess {String} tags_id Id of the tags separated by ','
+     * @apiSuccess {String} title Title of the experiment
+     * @apiSuccess {Number} userid User id of the owner
+     * @apiSuccess {String} canread Read permission of the experiment
+     * @apiSuccess {String} canwrite Write permission of the experiment
+     *
+     */
+    private function getTemplate(): Response
+    {
+        if ($this->id === null && $this->Entity instanceof Templates) {
+            return new JsonResponse($this->Entity->getTemplatesList());
+        }
+        $this->Entity->read(new ContentParams());
+        $permissions = $this->Entity->getPermissions($this->Entity->entityData);
+        if ($permissions['read'] === false) {
+            throw new IllegalActionException('User tried to access a template without read permissions');
+        }
 
         return new JsonResponse($this->Entity->entityData);
     }
@@ -469,8 +551,6 @@ class ApiController implements ControllerInterface
 
     /**
      * Get events from the team
-     *
-     * @return Response
      */
     private function getEvents(): Response
     {
@@ -505,23 +585,32 @@ class ApiController implements ControllerInterface
 
     /**
      * Get the file corresponding to the ID
-     *
-     * @return Response
      */
     private function getUpload(): Response
     {
         if ($this->id === null) {
             return new Response('You need to specify an ID!', 400);
         }
-        $Uploads = new Uploads(new Experiments($this->Users));
-        $uploadData = $Uploads->readFromId($this->id);
-        // check user owns the file
-        // we could also check if user has read access to the item
-        // but for now let's just restrict downloading file via API to owned files
-        if ((int) $uploadData['userid'] !== (int) $this->Users->userData['userid']) {
+        // note: we don't really care about this entity yet
+        $Uploads = new Uploads($this->Entity, $this->id);
+        $uploadData = $Uploads->read(new ContentParams());
+        // now we know the id and type of the entity
+        // so get the Entity to check for read permissions
+        if ($uploadData['type'] === 'experiments') {
+            $Entity = new Experiments($this->Users, (int) $uploadData['item_id']);
+        } elseif ($uploadData['type'] === 'items') {
+            $Entity = new Items($this->Users, (int) $uploadData['item_id']);
+        } else {
+            return new Response('Invalid upload id', 400);
+        }
+
+        try {
+            // make sure we have read access to that entity
+            $Entity->canOrExplode('read');
+        } catch (IllegalActionException) {
             return new Response('You do not have permission to access this resource.', 403);
         }
-        $filePath = \dirname(__DIR__, 2) . '/uploads/' . $uploadData['long_name'];
+        $filePath = dirname(__DIR__, 2) . '/uploads/' . $uploadData['long_name'];
         return new BinaryFileResponse($filePath);
     }
 
@@ -562,7 +651,6 @@ class ApiController implements ControllerInterface
      *         ]
      *     }
      */
-
     /**
      * @api {get} /status Get the list of status for current team
      * @apiName GetStatus
@@ -601,8 +689,6 @@ class ApiController implements ControllerInterface
 
     /**
      * Get items_types or status list for current team
-     *
-     * @return Response
      */
     private function getCategory(): Response
     {
@@ -631,18 +717,37 @@ class ApiController implements ControllerInterface
      *       "id": 42
      *     }
      */
-
-    /**
-     * Create an experiment
-     *
-     * @return Response
-     */
     private function createExperiment(): Response
     {
-        if ($this->Entity instanceof Database) {
-            return new Response('Creating database items is not supported.', 400);
-        }
-        $params = new ParamsProcessor(array('id' => 0));
+        $id = $this->Entity->create(new EntityParams('0'));
+        return new JsonResponse(array('result' => 'success', 'id' => $id));
+    }
+
+    /**
+     * @api {post} /templates Create template
+     * @apiName CreateTemplate
+     * @apiGroup Entity
+     * @apiExample {python} Python example
+     * import elabapy
+     * manager = elabapy.Manager(endpoint="https://elab.example.org/api/v1/", token="3148")
+     * response = manager.create_template()
+     * print(f"Created template with id {response['id']}.")
+     * @apiExample {shell} Curl example
+     * export TOKEN="3148"
+     * # create a template with default status
+     * curl -X POST -H "Authorization: $TOKEN" https://elab.example.org/api/v1/templates
+     * @apiSuccess {String} result success or error message
+     * @apiSuccess {String} id Id of the new template
+     * @apiSuccessExample {Json} Success-Response:
+     *     HTTP/2 200 OK
+     *     {
+     *       "result": "success",
+     *       "id": 42
+     *     }
+     */
+    private function createTemplate(): Response
+    {
+        $params = new EntityParams('created from api');
         $id = $this->Entity->create($params);
         return new JsonResponse(array('result' => 'success', 'id' => $id));
     }
@@ -669,16 +774,10 @@ class ApiController implements ControllerInterface
      *       "id": 42
      *     }
      */
-
-    /**
-     * Create a database item
-     *
-     * @return Response
-     */
     private function createItem(): Response
     {
         // check that the id we have is a valid item type from our team
-        $ItemsTypes = new ItemsTypes($this->Users);
+        $ItemsTypes = new ItemsTypes($this->Users->team);
         $itemsTypesArr = $ItemsTypes->readAll();
         $validIds = array();
         foreach ($itemsTypesArr as $itemsTypes) {
@@ -691,8 +790,7 @@ class ApiController implements ControllerInterface
         if ($this->id === null) {
             return new Response('Invalid id', 400);
         }
-        $params = new ParamsProcessor(array('id' => $this->id));
-        $id = $this->Entity->create($params);
+        $id = $this->Entity->create(new EntityParams((string) $this->id));
         return new JsonResponse(array('result' => 'success', 'id' => $id));
     }
 
@@ -719,15 +817,9 @@ class ApiController implements ControllerInterface
      *       "result": "success"
      *     }
      */
-
-    /**
-     * Create link from experiment to item
-     *
-     * @return Response
-     */
     private function createLink(): Response
     {
-        $this->Entity->Links->create(new ParamsProcessor(array('id' => (int) $this->Request->request->get('link'))));
+        $this->Entity->Links->create(new EntityParams($this->Request->request->getDigits('link')));
         return new JsonResponse(array('result' => 'success'));
     }
 
@@ -753,21 +845,15 @@ class ApiController implements ControllerInterface
      * # add tag "some-tag" to database item 42
      * curl -X POST -F "tag=some-tag" -H "Authorization: $TOKEN" https://elab.example.org/api/v1/items/42
      * @apiSuccess {String} result Success
-     * @apiError {String} error Error mesage
+     * @apiError {String} error Error message
      * @apiParamExample {Json} Request-Example:
      *     {
      *       "tag": "my tag"
      *     }
      */
-
-    /**
-     * Create tag
-     *
-     * @return Response
-     */
     private function createTag(): Response
     {
-        $this->Entity->Tags->create(new ParamsProcessor(array('tag' => $this->Request->request->get('tag') ?? '')));
+        $this->Entity->Tags->create(new TagParams((string) $this->Request->request->get('tag')));
         return new JsonResponse(array('result' => 'success'));
     }
 
@@ -776,7 +862,7 @@ class ApiController implements ControllerInterface
      * @apiName AddEvent
      * @apiGroup Events
      * @apiDescription Create an event in the scheduler for an item
-     * @apiParam {Sring} start Start time
+     * @apiParam {String} start Start time
      * @apiParam {Number} end End time
      * @apiParam {String} title Comment for the booking
      * @apiExample {python} Python example
@@ -795,19 +881,13 @@ class ApiController implements ControllerInterface
      * curl -X POST -F "start=2019-11-30T12:00:00" -F "end=2019-11-30T14:00:00" -F "title=Booked from API" -H "Authorization: $TOKEN" https://elab.example.org/api/v1/events/42
      * @apiSuccess {String} result Success
      * @apiSuccess {String} id Id of new event
-     * @apiError {Number} error Error mesage
+     * @apiError {Number} error Error message
      * @apiParamExample {Json} Request-Example:
      *     {
      *       "start": "2019-11-30T12:00:00",
      *       "end": "2019-11-30T14:00:00",
      *       "title": "Booked from API"
      *     }
-     */
-
-    /**
-     * Create an event in the scheduler for an item
-     *
-     * @return Response
      */
     private function createEvent(): Response
     {
@@ -816,9 +896,9 @@ class ApiController implements ControllerInterface
         }
         $this->Entity->setId($this->id);
         $id = $this->Scheduler->create(
-            $this->Request->request->get('start') ?? '',
-            $this->Request->request->get('end') ?? '',
-            $this->Request->request->get('title') ?? '',
+            (string) $this->Request->request->get('start'),
+            (string) $this->Request->request->get('end'),
+            (string) $this->Request->request->get('title'),
         );
         return new JsonResponse(array('result' => 'success', 'id' => $id));
     }
@@ -839,13 +919,7 @@ class ApiController implements ControllerInterface
      * # destroy event with id 13
      * curl -X DELETE -H "Authorization: $TOKEN" https://elab.example.org/api/v1/events/13
      * @apiSuccess {String} result Success
-     * @apiError {String} error Error mesage
-     */
-
-    /**
-     * Delete an event
-     *
-     * @return Response
+     * @apiError {String} error Error message
      */
     private function destroyEvent(): Response
     {
@@ -881,7 +955,7 @@ class ApiController implements ControllerInterface
      * # update database item 42
      * curl -X POST -F "title=a new title" -F "body=a new body" -F "date=20200504" -H "Authorization: $TOKEN" https://elab.example.org/api/v1/items/42
      * @apiSuccess {String} result Success
-     * @apiError {String} error Error mesage
+     * @apiError {String} error Error message
      * @apiParamExample {Json} Request-Example:
      *     {
      *       "body": "New body to be updated.",
@@ -889,19 +963,17 @@ class ApiController implements ControllerInterface
      *       "title": "New title"
      *     }
      */
-
-    /**
-     * Update experiment or item (title, date and body)
-     *
-     * @return Response
-     */
     private function updateEntity(): Response
     {
-        $this->Entity->update(
-            $this->Request->request->get('title') ?? 'Untitled',
-            $this->Request->request->get('date') ?? '',
-            $this->Request->request->get('body') ?? '',
-        );
+        if ($this->Request->request->has('title')) {
+            $this->Entity->update(new EntityParams((string) $this->Request->request->get('title'), 'title'));
+        }
+        if ($this->Request->request->has('date')) {
+            $this->Entity->update(new EntityParams($this->Request->request->getDigits('date'), 'date'));
+        }
+        if ($this->Request->request->has('body')) {
+            $this->Entity->update(new EntityParams((string) $this->Request->request->get('body'), 'body'));
+        }
         return new JsonResponse(array('result' => 'success'));
     }
 
@@ -927,17 +999,11 @@ class ApiController implements ControllerInterface
      * # update database item 42
      * curl -X POST -F "category=2" -H "Authorization: $TOKEN" https://elab.example.org/api/v1/items/42
      * @apiSuccess {String} result Success
-     * @apiError {String} error Error mesage
+     * @apiError {String} error Error message
      * @apiParamExample {Json} Request-Example:
      *     {
      *       "category": "2"
      *     }
-     */
-
-    /**
-     * Update experiment or item (title, date and body)
-     *
-     * @return Response
      */
     private function updateCategory(): Response
     {
@@ -956,11 +1022,11 @@ class ApiController implements ControllerInterface
      * import elabapy
      * manager = elabapy.Manager(endpoint="https://elab.example.org/api/v1/", token="3148")
      * # upload your-file.jpg to experiment 42
-     * with open('your-file.jpg', 'r') as myfile:
+     * with open('your-file.jpg', 'r+b') as myfile:
      *     params = { 'file': myfile }
      *     print(manager.upload_to_experiment(42, params))
      * # upload your-file.jpg to database item 1337
-     * with open('your-file.jpg', 'r') as myfile:
+     * with open('your-file.jpg', 'r+b') as myfile:
      *     params = { 'file': myfile }
      *     print(manager.upload_to_item(1337, params))
      * @apiExample {shell} Curl example
@@ -970,19 +1036,12 @@ class ApiController implements ControllerInterface
      * # upload your-file.jpg to database item 42
      * curl -X POST -F "file=@your-file.jpg" -H "Authorization: $TOKEN" "https://elab.example.org/api/v1/items/42"
      * @apiSuccess {String} result Success
-     * @apiError {String} error Error mesage
-     */
-
-    /**
-     * Upload a file to an entity
-     *
-     * @return Response
+     * @apiError {String} error Error message
      */
     private function uploadFile(): Response
     {
-        $this->Entity->canOrExplode('write');
-        $this->Entity->Uploads->create($this->Request);
+        $id = $this->Entity->Uploads->create(new CreateUpload($this->Request));
 
-        return new JsonResponse(array('result' => 'success'));
+        return new JsonResponse(array('result' => 'success', 'id' => $id));
     }
 }

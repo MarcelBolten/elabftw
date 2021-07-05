@@ -11,7 +11,7 @@ declare(strict_types=1);
 namespace Elabftw\Traits;
 
 use function dirname;
-use Elabftw\Elabftw\ReleaseCheck;
+use Elabftw\Elabftw\App;
 use Elabftw\Exceptions\FilesystemErrorException;
 use Elabftw\Models\Config;
 use function is_readable;
@@ -24,9 +24,7 @@ trait TwigTrait
     /**
      * Prepare the Twig object
      *
-     * @param Config $config
      *
-     * @return \Twig\Environment
      */
     protected function getTwig(Config $config): \Twig\Environment
     {
@@ -57,6 +55,7 @@ trait TwigTrait
         $extFilter = new \Twig\TwigFilter('getExt', '\Elabftw\Elabftw\Tools::getExt', $filterOptions);
         $filesizeFilter = new \Twig\TwigFilter('filesize', '\filesize', $filterOptions);
         $qFilter = new \Twig\TwigFilter('qFilter', '\Elabftw\Elabftw\Tools::qFilter', $filterOptions);
+        $langFilter = new \Twig\TwigFilter('jslang', '\Elabftw\Elabftw\Tools::getCalendarLang', $filterOptions);
         $limitOptions = new \Twig\TwigFunction('limitOptions', '\Elabftw\Elabftw\Tools::getLimitOptions');
 
         // custom test to check for a file
@@ -73,14 +72,14 @@ trait TwigTrait
         $TwigEnvironment->addFilter($extFilter);
         $TwigEnvironment->addFilter($filesizeFilter);
         $TwigEnvironment->addFilter($qFilter);
+        $TwigEnvironment->addFilter($langFilter);
         $TwigEnvironment->addFunction($limitOptions);
 
         // i18n for twig
         $TwigEnvironment->addExtension(new \Twig\Extensions\I18nExtension());
 
         // add the version as a global var so we can have it for the ?v=x.x.x for js files
-        $ReleaseCheck = new ReleaseCheck($config);
-        $TwigEnvironment->addGlobal('v', $ReleaseCheck::INSTALLED_VERSION);
+        $TwigEnvironment->addGlobal('v', App::INSTALLED_VERSION);
 
         if ($config->configArr['debug']) {
             $TwigEnvironment->addExtension(new \Twig\Extension\DebugExtension());

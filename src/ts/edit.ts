@@ -9,19 +9,42 @@ declare let key: any;
 declare let MathJax: any;
 import { displayMolFiles, display3DMolecules, insertParamAndReload, notif } from './misc';
 import { getTinymceBaseConfig, quickSave } from './tinymce';
-import 'jquery-ui/ui/widgets/datepicker';
+import { EntityType, Target, Upload, Payload, Method, Action } from './interfaces';
 import './doodle';
 import tinymce from 'tinymce/tinymce';
+import { getEntity } from './misc';
 import Dropzone from 'dropzone';
 import i18next from 'i18next';
+import { Metadata } from './Metadata.class';
+import { Ajax } from './Ajax.class';
+import UploadClass from './Upload.class';
+import EntityClass from './Entity.class';
 
 // the dropzone is created programmatically, disable autodiscover
 Dropzone.autoDiscover = false;
 
-$(document).ready(function() {
-  if ($('#info').data('page') !== 'edit') {
+document.addEventListener('DOMContentLoaded', () => {
+  if (!document.getElementById('info')) {
     return;
   }
+
+  // holds info about the page through data attributes
+  const about = document.getElementById('info').dataset;
+
+  // only run in edit mode
+  if (about.page !== 'edit') {
+    return;
+  }
+
+  // add the title in the page name (see #324)
+  document.title = (document.getElementById('title_input') as HTMLInputElement).value + ' - eLabFTW';
+
+  const entity = getEntity();
+  const EntityC = new EntityClass(entity.type);
+
+  // add extra fields elements from metadata json
+  const MetadataC = new Metadata(entity);
+  MetadataC.display('edit');
 
   // UPLOAD FORM
   new Dropzone('form#elabftw-dropzone', {
@@ -35,31 +58,31 @@ $(document).ready(function() {
     },
     init: function(): void {
 
-      // add additionnal parameters (id and type)
-      this.on('sending', function(file: string, xhr: string, formData: any) {
-        formData.append('upload', true);
-        formData.append('id', $('#info').data('id'));
-        formData.append('type', $('#info').data('type'));
+      // add additional parameters (id and type)
+      this.on('sending', function(file: string, xhr: string, formData: FormData) {
+        formData.append('upload', '1');
+        formData.append('type', entity.type);
+        formData.append('id', String(entity.id));
       });
 
       // once it is done
       this.on('complete', function(answer: any) {
-        // check the answer we get back from app/controllers/EntityController.php
+        // check the answer we get back from the controller
         const json = JSON.parse(answer.xhr.responseText);
         notif(json);
         // reload the #filesdiv once the file is uploaded
         if (this.getUploadingFiles().length === 0 && this.getQueuedFiles().length === 0) {
-          $('#filesdiv').load('?mode=edit&id=' + $('#info').data('id') + ' #filesdiv', function() {
+          $('#filesdiv').load(`?mode=edit&id=${String(entity.id)} #filesdiv > *`, function() {
             displayMolFiles();
             display3DMolecules(true);
             const dropZone = Dropzone.forElement('#elabftw-dropzone');
-
             // Check to make sure the success function is set by tinymce and we are dealing with an image drop and not a regular upload
             if (typeof dropZone.tinyImageSuccess !== 'undefined' && dropZone.tinyImageSuccess !== null) {
-              let url = $('#uploadsDiv').children().last().find('img').attr('src');
-              // This is from the html element that shows the thumbnail. The ending appended to the original upload is: "_th.jpg"
-              // Removing this appendage allows us to have the original file. This is a hack to demonstrate the pasting functionality.
-              url = url.substring(0, url.length-7);
+              // Uses the newly updated HTML element for the uploads section to find the last file uploaded and use that to get the remote url for the image.
+              let url = $('#uploadsDiv').children().last().find('[id^=upload-filename]').attr('href');
+              // Slices out the url by finding the &name query param from the download link. This does not care about extensions or thumbnails.
+              url = url.slice(0, url.indexOf('&name='));
+              // This gives tinyMce the actual url of the uploaded image. TinyMce updates its editor to link to this rather than the temp location it sets up initially.
               dropZone.tinyImageSuccess(url);
               // This is to make sure that we do not end up adding a file to tinymce if a previous file was pasted and a consecutive file was uploaded using Dropzone.
               // The 'undefined' check is not enough. That is just for before any file was pasted.
@@ -71,26 +94,14 @@ $(document).ready(function() {
     }
   });
 
-  // add the title in the page name (see #324)
-  document.title = $('#title_input').val() + ' - eLabFTW';
-
-  const type = $('#info').data('type');
-  const id = $('#info').data('id');
-  let location = 'experiments.php';
-  if (type != 'experiments') {
-    location = 'database.php';
-  }
-
   // KEYBOARD SHORTCUT
-  key($('#shortcuts').data('submit'), function() {
-    $('#main_form').submit();
-  });
+  key(about.scsubmit, () => (document.getElementById('main_form') as HTMLFormElement).submit());
 
   ////////////////
   // DATA RECOVERY
 
   // check if there is some local data with this id to recover
-  if ((localStorage.getItem('id') == id) && (localStorage.getItem('type') == type)) {
+  if ((localStorage.getItem('id') == String(entity.id)) && (localStorage.getItem('type') == entity.type)) {
     const bodyRecovery = $('<div></div>', {
       'class' : 'alert alert-warning',
       html: 'Recovery data found (saved on ' + localStorage.getItem('date') + '). It was probably saved because your session timed out and it could not be saved in the database. Do you want to recover it?<br><button class="button recover-yes">YES</button> <button class="button btn btn-danger recover-no">NO</button><br><br>Here is what it looks like: ' + localStorage.getItem('body')
@@ -100,15 +111,7 @@ $(document).ready(function() {
 
   // RECOVER YES
   $(document).on('click', '.recover-yes', function() {
-    $.post('app/controllers/EntityAjaxController.php', {
-      quickSave: true,
-      type : type,
-      id : id,
-      // we need this to get the updated content
-      title : (document.getElementById('title_input') as HTMLInputElement).value,
-      date : (document.getElementById('datepicker') as HTMLInputElement).value,
-      body : localStorage.getItem('body')
-    }).done(function() {
+    EntityC.update(entity.id, Target.Body, localStorage.getItem('body')).then(() => {
       localStorage.clear();
       document.location.reload(true);
     });
@@ -126,20 +129,13 @@ $(document).ready(function() {
   // GET MOL FILES
   function getListFromMolFiles(): void {
     const mols: any = [];
-    $.get('app/controllers/Ajax.php', {
-      action: 'readAll',
-      what: 'upload',
-      type: type,
-      params: {
-        itemId: id,
-      },
-    }).done(function(json) {
-      const uploadedFiles = json.msg;
-      uploadedFiles.forEach(function(upload: any) {
+    const UploadC = new UploadClass(entity);
+    UploadC.read().then(json => {
+      for (const upload of json.value as Array<Upload>) {
         if (upload.real_name.split('.').pop() === 'mol') {
           mols.push([upload.real_name, upload.long_name]);
         }
-      });
+      }
       if (mols.length === 0) {
         notif({res: false, msg: 'No mol files found.'});
         return;
@@ -165,47 +161,36 @@ $(document).ready(function() {
   });
   // END GET MOL FILES
 
-  class Entity {
+  // Add click listener and do action based on which element is clicked
+  document.querySelector('.real-container').addEventListener('click', (event) => {
+    const el = (event.target as HTMLElement);
+    // UPDATE ENTITY BODY
+    if (el.matches('[data-action="update-entity-body"]')) {
+      const editor = $('#iHazEditor').data('editor');
+      let content: string;
+      if (editor === 'md') {
+        content = ($('#body_area').val() as string);
+      } else {
+        content = tinymce.activeEditor.getContent();
+      }
+      EntityC.update(entity.id, Target.Body, content).then(json => {
+        if (json.res && editor !== 'md') {
+          // set the editor as non dirty so we can navigate out without a warning to clear
+          tinymce.activeEditor.setDirty(false);
+        }
+      });
 
-    destroy(): void {
+    // DESTROY ENTITY
+    } else if (el.matches('[data-action="destroy"]')) {
       if (confirm(i18next.t('entity-delete-warning'))) {
-        const controller = 'app/controllers/EntityAjaxController.php';
-        $.post(controller, {
-          destroy: true,
-          id: id,
-          type: type
-        }).done(function(json) {
-          notif(json);
+        const path = window.location.pathname;
+        EntityC.destroy(entity.id).then(json => {
           if (json.res) {
-            window.location.replace(location);
+            window.location.replace(path.split('/').pop());
           }
         });
       }
     }
-  }
-
-  class Star {
-      controller: string;
-
-      constructor() {
-        this.controller = 'app/controllers/EntityAjaxController.php';
-      }
-
-      update(rating: any): void {
-        $.post(this.controller, {
-          rating: rating,
-          id: id,
-          type: 'items',
-        }).done(function(json) {
-          notif(json);
-        });
-      }
-  }
-
-  // DESTROY ENTITY
-  const EntityC = new Entity();
-  $(document).on('click', '.entityDestroy', function() {
-    EntityC.destroy();
   });
 
   // CAN READ/WRITE SELECT
@@ -215,11 +200,21 @@ $(document).ready(function() {
     $.post('app/controllers/EntityAjaxController.php', {
       updatePermissions: true,
       rw: rw,
-      id: id,
-      type: type,
+      id: entity.id,
+      type: entity.type,
       value: value,
     }).done(function(json) {
       notif(json);
+    });
+  });
+
+  // TRANSFER OWNERSHIP
+  document.getElementById('new_owner').addEventListener('change', () => {
+    const value = (document.getElementById('new_owner') as HTMLInputElement).value;
+    EntityC.update(entity.id, Target.UserId, value).then(json => {
+      if (json.res) {
+        window.location.reload();
+      }
     });
   });
 
@@ -228,8 +223,8 @@ $(document).ready(function() {
     const categoryId = $(this).val();
     $.post('app/controllers/EntityAjaxController.php', {
       updateCategory: true,
-      id: id,
-      type: type,
+      id: entity.id,
+      type: entity.type,
       categoryId : categoryId
     }).done(function(json) {
       notif(json);
@@ -269,19 +264,6 @@ $(document).ready(function() {
     });
   }
 
-  // DATEPICKER
-  $('#datepicker').datepicker({
-    dateFormat: 'yymmdd',
-    onClose: (date) => {
-      $.post('app/controllers/EntityAjaxController.php', {
-        updateDate: true,
-        type : type,
-        id : id,
-        date : date,
-      }).done((json) => notif(json));
-    },
-  });
-
   // If the title is 'Untitled', clear it on focus
   $('#title_input').focus(function(){
     if ($(this).val() === i18next.t('entity-default-title')) {
@@ -296,22 +278,21 @@ $(document).ready(function() {
     const context: CanvasRenderingContext2D = (document.getElementById('doodleCanvas') as HTMLCanvasElement).getContext('2d');
     const img = new Image();
     // set src attribute to image path
-    img.src = 'app/download.php?f=' + $(this).data('path');
-    img.onload = (): void => {
+    img.addEventListener('load', function() {
       // make canvas bigger than image
       context.canvas.width = (this as HTMLImageElement).width * 2;
       context.canvas.height = (this as HTMLImageElement).height * 2;
       // add image to canvas
       context.drawImage(img, (this as HTMLImageElement).width / 2, (this as HTMLImageElement).height / 2);
-    };
+    });
+    img.src = 'app/download.php?f=' + $(this).data('path');
   });
   // STAR RATING
-  const StarC = new Star();
   $(document).on('click', '.rating-cancel', function() {
-    StarC.update(0);
+    EntityC.update(entity.id, Target.Rating, '0');
   });
   $(document).on('click', '.star', function() {
-    StarC.update($(this).data('rating').current[0].innerText);
+    EntityC.update(entity.id, Target.Rating, $(this).data('rating').current[0].innerText);
   });
 
   // Object to hold control data for selected image
@@ -323,8 +304,9 @@ $(document).ready(function() {
   };
 
   const tinyConfig = getTinymceBaseConfig('edit');
+
   const tinyConfigForEdit = {
-    images_upload_handler: (blobInfo, success) => { // eslint-disable-line @typescript-eslint/camelcase
+    images_upload_handler: (blobInfo, success): void => { // eslint-disable-line @typescript-eslint/camelcase
       const dropZone = Dropzone.forElement('#elabftw-dropzone');
       // Edgecase for editing an image using tinymce ImageTools
       // Check if it was selected. This is set by an event hook below
@@ -334,7 +316,7 @@ $(document).ready(function() {
         formData.append('replace', 'true');
         formData.append('upload_id', tinymceEditImage.uploadId);
         formData.append('id', tinymceEditImage.itemId);
-        formData.append('type', 'experiments');
+        formData.append('type', entity.type);
         formData.append('file', blobInfo.blob());
 
         $.post({
@@ -349,7 +331,7 @@ $(document).ready(function() {
           tinymceEditImage = {selected:false, uploadId:'', itemId:'', url:''};
         });
       // If the blob has no filename, ask for one. (Firefox edgecase: Embedded image in Data URL)
-      } else if (typeof blobInfo.blob().name=== 'undefined') {
+      } else if (typeof blobInfo.blob().name === 'undefined') {
         const filename = prompt('Enter filename with extension e.g. .jpeg');
         if (typeof filename !== 'undefined' && filename !== null) {
           const fileOfBlob = new File([blobInfo.blob()], filename);
@@ -364,15 +346,30 @@ $(document).ready(function() {
         dropZone.tinyImageSuccess = success;
       }
     },
+    // use undocumented callback function to asynchronously get the templates
+    // see https://github.com/tinymce/tinymce/issues/5637#issuecomment-624982699
+    templates: (callback): void => {
+      const payload: Payload = {
+        method: Method.GET,
+        action: Action.Read,
+        model: EntityType.Template,
+        entity: {
+          type: EntityType.Template,
+          id: null,
+        },
+        target: Target.List,
+      };
+      (new Ajax()).send(payload).then(json => callback(json.value));
+    },
     // use a custom function for the save button in toolbar
-    save_onsavecallback: () => quickSave(type , $('#info').data('id')), // eslint-disable-line @typescript-eslint/camelcase
+    save_onsavecallback: (): void => quickSave(entity), // eslint-disable-line @typescript-eslint/camelcase
   };
 
   tinymce.init(Object.assign(tinyConfig, tinyConfigForEdit));
   // Hook into the SelectionChange event - This is to make sure we reset our control variable correctly
   tinymce.activeEditor.on('SelectionChange', () => {
     // Check if the user has selected an image
-    if (tinymce.activeEditor.selection.getNode().tagName == 'IMG')
+    if (tinymce.activeEditor.selection.getNode().tagName === 'IMG')
     {
       // Save all the details needed for replacing upload
       // Then check for and get those details when you are handling file uploads
@@ -446,13 +443,16 @@ $(document).ready(function() {
   $(document).on('click', '.linkImport', function() {
     importBody($(this));
   });
-  // update title on blur
-  $('#main_form').on('blur', '#title_input', function() {
-    $.post('app/controllers/EntityAjaxController.php', {
-      updateTitle: true,
-      type : type,
-      id : id,
-      title : $(this).val(),
-    }).done((json) => notif(json));
+
+  $(document).on('blur', '#date_input', function() {
+    const content = (document.getElementById('date_input') as HTMLInputElement).value;
+    EntityC.update(entity.id, Target.Date, content);
+  });
+
+  $(document).on('blur', '#title_input', function() {
+    const content = (document.getElementById('title_input') as HTMLInputElement).value;
+    EntityC.update(entity.id, Target.Title, content);
+    // update the page's title
+    document.title = content + ' - eLabFTW';
   });
 });

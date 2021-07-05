@@ -39,12 +39,8 @@ use Symfony\Component\HttpFoundation\Session\Flash\FlashBag;
  */
 class LoginController implements ControllerInterface
 {
-    /** @var App $App */
-    private $App;
-
-    public function __construct(App $app)
+    public function __construct(private App $App)
     {
-        $this->App = $app;
     }
 
     public function getResponse(): Response
@@ -63,7 +59,7 @@ class LoginController implements ControllerInterface
                 );
 
                 // check the input code against the secret stored in session
-                if (!$MfaHelper->verifyCode($this->App->Request->request->get('mfa_code') ?? '')) {
+                if (!$MfaHelper->verifyCode($this->App->Request->request->getAlnum('mfa_code'))) {
                     if ($flashBag instanceof FlashBag) {
                         $flashBag->add($flashKey, _('The code you entered is not valid!'));
                     }
@@ -87,15 +83,25 @@ class LoginController implements ControllerInterface
             return new RedirectResponse('../../ucp.php?tab=2');
         }
 
-        // store the rememberme choice in session
-        $this->App->Session->set('rememberme', false);
+        // get our Auth service
+        $authType = $this->App->Request->request->getAlpha('auth_type');
+
+        // store the rememberme choice in a cookie, not the session as it won't follow up for saml
+        $icanhazcookies = '0';
         if ($this->App->Request->request->has('rememberme')) {
-            $this->App->Session->set('rememberme', true);
+            $icanhazcookies = '1';
         }
+        $cookieOptions = array(
+            'expires' => time() + 300,
+            'path' => '/',
+            'domain' => '',
+            'secure' => true,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        );
+        setcookie('icanhazcookies', $icanhazcookies, $cookieOptions);
 
-
-        // get our Auth service and try to authenticate
-        $authType = $this->App->Request->request->get('auth_type');
+        // try to authenticate
         $AuthResponse = $this->getAuthService($authType)->tryAuth();
 
         /////////
@@ -119,7 +125,7 @@ class LoginController implements ControllerInterface
         // TEAM SELECTION //
         ////////////////////
         // if the user is in several teams, we need to redirect to the team selection
-        if ($AuthResponse->selectedTeam === null) {
+        if ($AuthResponse->isInSeveralTeams) {
             $this->App->Session->set('team_selection_required', true);
             $this->App->Session->set('team_selection', $AuthResponse->selectableTeams);
             $this->App->Session->set('auth_userid', $AuthResponse->userid);
@@ -128,7 +134,7 @@ class LoginController implements ControllerInterface
 
         // All good now we can login the user
         $LoginHelper = new LoginHelper($AuthResponse, $this->App->Session);
-        $LoginHelper->login($this->App->Session->get('rememberme'));
+        $LoginHelper->login((bool) $icanhazcookies);
 
         // cleanup
         $this->App->Session->remove('failed_attempt');
@@ -136,7 +142,7 @@ class LoginController implements ControllerInterface
         $this->App->Session->remove('auth_userid');
 
         return new RedirectResponse(
-            $this->App->Request->cookies->get('redirect') ?? '../../experiments.php'
+            (string) ($this->App->Request->cookies->get('redirect') ?? '../../experiments.php')
         );
     }
 
@@ -146,20 +152,25 @@ class LoginController implements ControllerInterface
             // AUTH WITH LDAP
             case 'ldap':
                 $c = $this->App->Config->configArr;
+                $ldapPassword = null;
+                // assume there is a password to decrypt if username is not null
+                if ($c['ldap_username']) {
+                    $ldapPassword = Crypto::decrypt($c['ldap_password'], Key::loadFromAsciiSafeString(\SECRET_KEY));
+                }
                 $ldapConfig = array(
                     'hosts' => array($c['ldap_host']),
                     'port' => (int) $c['ldap_port'],
                     'base_dn' => $c['ldap_base_dn'],
                     'username' => $c['ldap_username'],
-                    'password' => Crypto::decrypt($c['ldap_password'], Key::loadFromAsciiSafeString(\SECRET_KEY)),
+                    'password' => $ldapPassword,
                     'use_tls' => (bool) $c['ldap_use_tls'],
                 );
                 $connection = new Connection($ldapConfig);
-                return new LdapAuth($connection, $c, $this->App->Request->request->get('email'), $this->App->Request->request->get('password'));
+                return new LdapAuth($connection, $c, (string) $this->App->Request->request->get('email'), (string) $this->App->Request->request->get('password'));
 
             // AUTH WITH LOCAL DATABASE
             case 'local':
-                return new LocalAuth($this->App->Request->request->get('email'), $this->App->Request->request->get('password'));
+                return new LocalAuth((string) $this->App->Request->request->get('email'), (string) $this->App->Request->request->get('password'));
 
             // AUTH WITH SAML
             case 'saml':
@@ -207,7 +218,7 @@ class LoginController implements ControllerInterface
                         (int) $this->App->Session->get('auth_userid'),
                         $this->App->Session->get('mfa_secret'),
                     ),
-                    $this->App->Request->request->get('mfa_code') ?? '',
+                    $this->App->Request->request->getAlnum('mfa_code'),
                 );
 
             default:

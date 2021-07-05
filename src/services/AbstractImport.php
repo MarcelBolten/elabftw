@@ -21,34 +21,21 @@ use Symfony\Component\HttpFoundation\Request;
  */
 abstract class AbstractImport
 {
-    /** @var Db $Db SQL Database */
-    protected $Db;
+    protected Db $Db;
 
-    /** @var UploadedFile $UploadedFile the uploaded file */
-    protected $UploadedFile;
+    protected UploadedFile $UploadedFile;
 
-    /** @var Users $Users instance of Users */
-    protected $Users;
+    // the item type category or userid where we do the import
+    protected int $target;
 
-    /** @var int $target the item type category or userid where we do the import */
-    protected $target;
+    // read permission for the imported items
+    protected string $canread;
 
-    /** @var string $canread read permission for the imported items */
-    protected $canread;
-
-    /**
-     * Constructor
-     *
-     * @param Users $users instance of Users
-     * @param Request $request instance of Request
-     * @return void
-     */
-    public function __construct(Users $users, Request $request)
+    public function __construct(protected Users $Users, Request $request)
     {
         $this->Db = Db::getConnection();
-        $this->Users = $users;
         $this->target = (int) $request->request->get('target');
-        $this->canread = Check::visibility($request->request->get('visibility') ?? '');
+        $this->canread = Check::visibility($request->request->getAlnum('visibility'));
         $this->UploadedFile = $request->files->all()['file'];
         if ($this->UploadedFile->getError()) {
             throw new ImproperActionException($this->UploadedFile->getErrorMessage());
@@ -60,8 +47,6 @@ abstract class AbstractImport
     /**
      * Look at mime type. not a trusted source, but it can prevent dumb errors
      * There is null in the mimes array because it can happen that elabftw files are like that.
-     *
-     * @return bool
      */
     protected function checkMimeType(): bool
     {

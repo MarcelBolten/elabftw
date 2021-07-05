@@ -24,64 +24,46 @@ use PDO;
  */
 class Team implements MapInterface
 {
-    /** @var Db $Db */
-    private $Db;
+    private Db $Db;
 
-    /** @var int $id */
-    private $id;
+    private string $commonTemplate = '';
 
-    /** @var string $name */
-    private $name;
+    private string $name = '';
 
-    /** @var int $deletableXp */
-    private $deletableXp;
+    private int $deletableXp = 1;
 
-    /** @var int $publicDb */
-    private $publicDb;
+    private int $deletableItem = 1;
 
-    /** @var string $linkName */
-    private $linkName = 'Documentation';
+    private int $userCreateTag = 1;
 
-    /** @var string $linkHref */
-    private $linkHref = 'https://doc.elabftw.net';
+    private int $publicDb = 0;
 
-    /** @var string|null $stamplogin */
-    private $stamplogin;
+    private string $linkName = 'Documentation';
 
-    /** @var string|null $stamppass */
-    private $stamppass;
+    private string $linkHref = 'https://doc.elabftw.net';
 
-    /** @var string|null $stampprovider url for the team's timestamping provider */
-    private $stampprovider;
+    private string $stamplogin = '';
 
-    /** @var string|null $stampcert path to the cert for the team's timestamping provider */
-    private $stampcert;
+    private string $stamppass = '';
 
-    /** @var string|null $orgid */
-    private $orgid;
+    private string $stampprovider = '';
 
-    /** @var int $doForceCanread */
-    private $doForceCanread;
+    private string $stampcert = '';
 
-    /** @var int $doForceCanwrite */
-    private $doForceCanwrite;
+    private string $orgid = '';
 
-    /** @var string $forceCanread */
-    private $forceCanread;
+    private int $doForceCanread;
 
-    /** @var string $forceCanwrite */
-    private $forceCanwrite;
+    private int $doForceCanwrite;
 
-    /** @var int $visible */
-    private $visible;
+    private string $forceCanread = '';
 
-    /**
-     * Constructor
-     *
-     */
-    public function __construct(int $id)
+    private string $forceCanwrite = '';
+
+    private int $visible;
+
+    public function __construct(private int $id)
     {
-        $this->id = $id;
         $this->Db = Db::getConnection();
         $this->hydrate($this->read());
     }
@@ -104,6 +86,19 @@ class Team implements MapInterface
         return $this->name;
     }
 
+    final public function setCommonTemplate(?string $setting): void
+    {
+        if ($setting === null) {
+            throw new ImproperActionException('Common template cannot be empty!');
+        }
+        $this->commonTemplate = $setting;
+    }
+
+    final public function getCommonTemplate(): string
+    {
+        return $this->commonTemplate;
+    }
+
     final public function setDeletableXp(string $setting): void
     {
         $this->deletableXp = Filter::toBinary($setting);
@@ -112,6 +107,26 @@ class Team implements MapInterface
     final public function getDeletableXp(): int
     {
         return $this->deletableXp;
+    }
+
+    final public function setDeletableItem(string $setting): void
+    {
+        $this->deletableItem = Filter::toBinary($setting);
+    }
+
+    final public function getDeletableItem(): int
+    {
+        return $this->deletableItem;
+    }
+
+    final public function setUserCreateTag(string $setting): void
+    {
+        $this->userCreateTag = Filter::toBinary($setting);
+    }
+
+    final public function getUserCreateTag(): int
+    {
+        return $this->userCreateTag;
     }
 
     final public function setPublicDb(string $setting): void
@@ -227,8 +242,11 @@ class Team implements MapInterface
     {
         $sql = 'UPDATE teams SET
             name = :name,
+            common_template = :common_template,
             orgid = :orgid,
             deletable_xp = :deletable_xp,
+            deletable_item = :deletable_item,
+            user_create_tag = :user_create_tag,
             public_db = :public_db,
             link_name = :link_name,
             link_href = :link_href,
@@ -244,8 +262,11 @@ class Team implements MapInterface
             WHERE id = :id';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':name', $this->name);
+        $req->bindParam(':common_template', $this->commonTemplate);
         $req->bindParam(':orgid', $this->orgid);
         $req->bindParam(':deletable_xp', $this->deletableXp, PDO::PARAM_INT);
+        $req->bindParam(':deletable_item', $this->deletableItem, PDO::PARAM_INT);
+        $req->bindParam(':user_create_tag', $this->userCreateTag, PDO::PARAM_INT);
         $req->bindParam(':public_db', $this->publicDb, PDO::PARAM_INT);
         $req->bindParam(':link_name', $this->linkName);
         $req->bindParam(':link_href', $this->linkHref);
@@ -268,13 +289,15 @@ class Team implements MapInterface
      * Source can be sql query or post data
      *
      * @param array<string, mixed> $source
-     * @return void
      */
     public function hydrate(array $source): void
     {
         $this->setName($source['name'] ?? $this->name);
+        $this->setCommonTemplate($source['common_template'] ?? $this->commonTemplate);
         $this->setOrgid($source['orgid'] ?? $this->orgid);
         $this->setDeletableXp($source['deletable_xp'] ?? (string) $this->deletableXp);
+        $this->setDeletableItem($source['deletable_item'] ?? (string) $this->deletableItem);
+        $this->setUserCreateTag($source['user_create_tag'] ?? (string) $this->userCreateTag);
         $this->setLinkName($source['link_name'] ?? $this->linkName);
         $this->setLinkHref($source['link_href'] ?? $this->linkHref);
         $this->setStamplogin($source['stamplogin'] ?? $this->stamplogin);
@@ -293,8 +316,6 @@ class Team implements MapInterface
 
     /**
      * Read from the current team
-     *
-     * @return array
      */
     private function read(): array
     {

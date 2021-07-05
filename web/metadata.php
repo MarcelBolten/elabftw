@@ -26,7 +26,7 @@ $Response = new Response();
 $Response->prepare($Request);
 
 try {
-    $Saml = new Saml(new Config(), new Idps());
+    $Saml = new Saml(Config::getConfig(), new Idps());
     $settingsArr = $Saml->getSettings();
     if (empty($settingsArr['sp']['entityId'])) {
         throw new ImproperActionException('No Service Provider configured. Aborting.');
@@ -39,7 +39,6 @@ try {
     if (empty($errors)) {
         $Response->setContent($metadata);
         $Response->headers->set('Content-Type', 'text/xml');
-        $Response->send();
     } else {
         throw new Error(
             'Invalid SP metadata: ' . implode(', ', $errors),
